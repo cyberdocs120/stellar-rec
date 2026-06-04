@@ -1,0 +1,11 @@
+[package]
+name = "integration-tests"
+version = "0.1.0"
+edition.workspace = true
+
+[dependencies]
+soroban-sdk.workspace = true
+rec-token = { path = "../../contracts/rec-token" }
+oracle-handler = { path = "../../contracts/oracle-handler" }
+marketplace = { path = "../../contracts/marketplace" }
+retirement = { path = "../../contracts/retirement" }

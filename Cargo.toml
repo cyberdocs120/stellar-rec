@@ -1,0 +1,17 @@
+[workspace]
+resolver = "2"
+members = [
+    "contracts/rec-token",
+    "contracts/oracle-handler",
+    "contracts/marketplace",
+    "contracts/retirement",
+    "tests/integration",
+]
+
+[workspace.package]
+edition = "2021"
+rust-version = "1.81"
+license = "MIT"
+
+[workspace.dependencies]
+soroban-sdk = "22.0.0"
