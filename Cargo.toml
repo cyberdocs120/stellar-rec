@@ -14,4 +14,4 @@ rust-version = "1.81"
 license = "MIT"
 
 [workspace.dependencies]
-soroban-sdk = "22.0.0"
+soroban-sdk = "26.0.1"
