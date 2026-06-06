@@ -3,8 +3,10 @@
 mod storage;
 mod types;
 mod errors;
+#[cfg(test)]
+mod test;
 
-use soroban_sdk::{contract, contractimpl, panic_with_error, Address, Bytes, BytesN, Env};
+use soroban_sdk::{contract, contractimpl, panic_with_error, symbol_short, Address, Bytes, BytesN, Env};
 
 use errors::RecTokenError;
 use storage::*;
@@ -89,25 +91,114 @@ impl RecTokenContract {
         env.storage().instance().remove(&authorized_burner_key());
     }
 
-    // ---------- STUBS (Day 3) ----------
+    // ---------- Mint ----------
 
     pub fn mint(
-        _env: Env,
-        _to: Address,
-        _asset_id: BytesN<32>,
-        _generation_timestamp: u64,
-        _fuel_type: FuelType,
-        _vintage_year: u32,
-        _metadata_uri: Bytes,
+        env: Env,
+        to: Address,
+        asset_id: BytesN<32>,
+        generation_timestamp: u64,
+        fuel_type: FuelType,
+        vintage_year: u32,
+        metadata_uri: Bytes,
     ) -> u64 {
-        panic!("not implemented")
+        let minter = read_authorized_minter(&env);
+        minter.require_auth();
+
+        let token_id = read_token_id_counter(&env) + 1;
+        write_token_id_counter(&env, token_id);
+
+        let metadata = RecMetadata {
+            token_id,
+            asset_id,
+            generation_timestamp,
+            fuel_type,
+            vintage_year,
+            metadata_uri,
+            state: RecState::Active,
+            retired_at: None,
+            retirement_receipt: None,
+        };
+
+        let token = RecTokenValue {
+            owner: to.clone(),
+            metadata,
+        };
+        write_token(&env, token_id, &token);
+
+        let count = read_owner_count(&env, &to) + 1;
+        write_owner_count(&env, &to, count);
+
+        let supply = read_total_supply(&env) + 1;
+        write_total_supply(&env, supply);
+
+        env.events().publish(
+            (symbol_short!("rec"), symbol_short!("mint")),
+            (token_id, generation_timestamp, 1u64),
+        );
+
+        token_id
     }
 
-    pub fn transfer(_env: Env, _from: Address, _to: Address, _token_id: u64) {
-        panic!("not implemented")
+    // ---------- Transfer ----------
+
+    pub fn transfer(env: Env, from: Address, to: Address, token_id: u64) {
+        from.require_auth();
+
+        if !has_token(&env, token_id) {
+            panic_with_error!(&env, RecTokenError::TokenNotFound);
+        }
+
+        let mut token = read_token(&env, token_id);
+        if token.owner != from {
+            panic_with_error!(&env, RecTokenError::Unauthorized);
+        }
+        if token.metadata.state != RecState::Active {
+            panic_with_error!(&env, RecTokenError::RecAlreadyRetired);
+        }
+
+        token.owner = to.clone();
+        write_token(&env, token_id, &token);
+
+        let from_count = read_owner_count(&env, &from);
+        write_owner_count(&env, &from, from_count.saturating_sub(1));
+
+        let to_count = read_owner_count(&env, &to) + 1;
+        write_owner_count(&env, &to, to_count);
+
+        env.events().publish(
+            (symbol_short!("rec"), symbol_short!("xfer")),
+            (token_id, from, to),
+        );
     }
 
-    pub fn burn(_env: Env, _token_id: u64) {
-        panic!("not implemented")
+    // ---------- Burn ----------
+
+    pub fn burn(env: Env, caller: Address, token_id: u64) {
+        caller.require_auth();
+
+        if !has_token(&env, token_id) {
+            panic_with_error!(&env, RecTokenError::TokenNotFound);
+        }
+
+        let mut token = read_token(&env, token_id);
+        if token.metadata.state != RecState::Active {
+            panic_with_error!(&env, RecTokenError::RecAlreadyRetired);
+        }
+
+        token.metadata.state = RecState::Retired;
+        token.metadata.retired_at = Some(env.ledger().timestamp());
+        write_token(&env, token_id, &token);
+
+        let count = read_owner_count(&env, &token.owner);
+        write_owner_count(&env, &token.owner, count.saturating_sub(1));
+
+        let supply = read_total_supply(&env);
+        write_total_supply(&env, supply.saturating_sub(1));
+
+        env.events().publish(
+            (symbol_short!("rec"), symbol_short!("burn")),
+            (token_id, caller),
+        );
     }
 }
