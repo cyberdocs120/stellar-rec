@@ -169,3 +169,87 @@ fn test_burn_nonexistent_token() {
     env.mock_all_auths();
     client.burn(&caller, &999u64);
 }
+
+#[test]
+fn test_set_metadata_uri() {
+    setup_env!(env, client, _admin, minter, receiver);
+
+    env.mock_all_auths();
+    let token_id = client.mint(
+        &receiver,
+        &make_asset_id(&env),
+        &1234567890u64,
+        &FuelType::Solar,
+        &2026u32,
+        &make_metadata_uri(&env),
+    );
+
+    let new_uri = Bytes::from_slice(&env, b"https://example.com/new-metadata");
+    client.set_metadata_uri(&token_id, &new_uri);
+
+    let meta = client.token_metadata(&token_id);
+    assert_eq!(meta.metadata_uri, new_uri);
+}
+
+#[test]
+fn test_tokens_by_owner_pagination() {
+    let env = Env::default();
+    let admin = Address::generate(&env);
+    let minter = Address::generate(&env);
+    let owner = Address::generate(&env);
+    env.mock_all_auths();
+    let contract_id = env.register(RecTokenContract, (&admin,));
+    let client = RecTokenContractClient::new(&env, &contract_id);
+    client.authorize_minter(&minter);
+
+    for i in 0..10 {
+        client.mint(
+            &owner,
+            &make_asset_id(&env),
+            &(1000 + i),
+            &FuelType::Wind,
+            &2026u32,
+            &make_metadata_uri(&env),
+        );
+    }
+
+    let page1 = client.tokens_by_owner(&owner, &0u64, &3u64);
+    assert_eq!(page1.len(), 3);
+    assert_eq!(page1.get(0).unwrap(), 1);
+    assert_eq!(page1.get(1).unwrap(), 2);
+    assert_eq!(page1.get(2).unwrap(), 3);
+
+    let page2 = client.tokens_by_owner(&owner, &3u64, &3u64);
+    assert_eq!(page2.len(), 3);
+    assert_eq!(page2.get(0).unwrap(), 4);
+    assert_eq!(page2.get(1).unwrap(), 5);
+    assert_eq!(page2.get(2).unwrap(), 6);
+
+    let page_all = client.tokens_by_owner(&owner, &0u64, &20u64);
+    assert_eq!(page_all.len(), 10);
+
+    let other = Address::generate(&env);
+    let empty = client.tokens_by_owner(&other, &0u64, &10u64);
+    assert_eq!(empty.len(), 0);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #2)")]
+fn test_transfer_retired_token_rejected() {
+    setup_env!(env, client, _admin, _minter, receiver);
+
+    env.mock_all_auths();
+    let token_id = client.mint(
+        &receiver,
+        &make_asset_id(&env),
+        &1234567890u64,
+        &FuelType::Solar,
+        &2026u32,
+        &make_metadata_uri(&env),
+    );
+
+    client.burn(&receiver, &token_id);
+
+    let new_owner = Address::generate(&env);
+    client.transfer(&receiver, &new_owner, &token_id);
+}
