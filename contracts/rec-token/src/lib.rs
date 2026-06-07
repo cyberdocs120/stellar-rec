@@ -6,7 +6,7 @@ mod errors;
 #[cfg(test)]
 mod test;
 
-use soroban_sdk::{contract, contractimpl, panic_with_error, symbol_short, Address, Bytes, BytesN, Env};
+use soroban_sdk::{contract, contractimpl, panic_with_error, symbol_short, Address, Bytes, BytesN, Env, Vec};
 
 use errors::RecTokenError;
 use storage::*;
@@ -200,5 +200,43 @@ impl RecTokenContract {
             (symbol_short!("rec"), symbol_short!("burn")),
             (token_id, caller),
         );
+    }
+
+    // ---------- Set Metadata URI ----------
+
+    pub fn set_metadata_uri(env: Env, token_id: u64, new_uri: Bytes) {
+        let admin = read_admin(&env);
+        admin.require_auth();
+
+        if !has_token(&env, token_id) {
+            panic_with_error!(&env, RecTokenError::TokenNotFound);
+        }
+
+        let mut token = read_token(&env, token_id);
+        token.metadata.metadata_uri = new_uri;
+        write_token(&env, token_id, &token);
+    }
+
+    // ---------- Tokens By Owner ----------
+
+    pub fn tokens_by_owner(env: Env, owner: Address, start: u64, limit: u64) -> Vec<u64> {
+        let counter = read_token_id_counter(&env);
+        let mut result: Vec<u64> = Vec::new(&env);
+        let mut found = 0u64;
+
+        for token_id in 1..=counter {
+            if !has_token(&env, token_id) {
+                continue;
+            }
+            let token = read_token(&env, token_id);
+            if token.owner == owner && token.metadata.state == RecState::Active {
+                if found >= start && result.len() < limit as u32 {
+                    result.push_back(token_id);
+                }
+                found += 1;
+            }
+        }
+
+        result
     }
 }
