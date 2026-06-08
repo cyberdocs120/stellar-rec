@@ -86,10 +86,6 @@ pub fn read_rec_token(env: &Env) -> Address {
     env.storage().instance().get(&rec_token_key()).unwrap()
 }
 
-pub fn has_rec_token(env: &Env) -> bool {
-    env.storage().instance().has(&rec_token_key())
-}
-
 // ---------- Oracle node storage ----------
 
 pub fn oracle_storage_key(env: &Env, pubkey: &BytesN<32>) -> Bytes {

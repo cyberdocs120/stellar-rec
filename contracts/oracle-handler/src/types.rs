@@ -1,4 +1,13 @@
-use soroban_sdk::{contracttype, Bytes, BytesN};
+use soroban_sdk::{contracttype, Address, Bytes, BytesN};
+
+#[derive(Clone, Debug, PartialEq)]
+#[contracttype]
+pub enum FuelType {
+    Solar,
+    Wind,
+    Hydro,
+    Other,
+}
 
 #[derive(Clone, Debug)]
 #[contracttype]
@@ -14,6 +23,7 @@ pub struct OracleNode {
 pub struct MeterBinding {
     pub meter_id: BytesN<32>,
     pub asset_id: BytesN<32>,
+    pub receiver: Address,
     pub capacity_mw: u64,
 }
 

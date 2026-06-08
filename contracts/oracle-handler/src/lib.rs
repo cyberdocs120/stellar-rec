@@ -6,7 +6,7 @@ mod errors;
 #[cfg(test)]
 mod test;
 
-use soroban_sdk::{contract, contractimpl, panic_with_error, symbol_short, Address, Bytes, BytesN, Env};
+use soroban_sdk::{contract, contractimpl, panic_with_error, symbol_short, Address, Bytes, BytesN, Env, IntoVal};
 
 use errors::OracleError;
 use storage::*;
@@ -117,13 +117,14 @@ impl OracleHandlerContract {
         (read_threshold_n(&env), read_threshold_d(&env))
     }
 
-    pub fn set_meter(env: Env, meter_id: BytesN<32>, asset_id: BytesN<32>, capacity_mw: u64) {
+    pub fn set_meter(env: Env, meter_id: BytesN<32>, receiver: Address, asset_id: BytesN<32>, capacity_mw: u64) {
         let admin = read_admin(&env);
         admin.require_auth();
 
         let binding = MeterBinding {
             meter_id: meter_id.clone(),
             asset_id,
+            receiver,
             capacity_mw,
         };
         write_meter(&env, &meter_id, &binding);
@@ -160,19 +161,98 @@ impl OracleHandlerContract {
         read_paused(&env)
     }
 
-    // ---------- Stubs for Day 6 ----------
-
     pub fn submit_reading(
-        _env: Env,
-        _meter_id: BytesN<32>,
-        _mwh: u64,
-        _generation_timestamp: u64,
-        _signatures: soroban_sdk::Vec<(BytesN<32>, BytesN<64>)>,
-        _fuel_type: u32,
-        _vintage_year: u32,
-        _metadata_uri: Bytes,
+        env: Env,
+        meter_id: BytesN<32>,
+        mwh: u64,
+        generation_timestamp: u64,
+        signatures: soroban_sdk::Vec<(BytesN<32>, BytesN<64>)>,
+        fuel_type: u32,
+        vintage_year: u32,
+        metadata_uri: Bytes,
     ) -> u64 {
-        panic_with_error!(&_env, OracleError::Unauthorized);
+        if read_paused(&env) {
+            panic_with_error!(&env, OracleError::ContractPaused);
+        }
+
+        if !has_meter(&env, &meter_id) {
+            panic_with_error!(&env, OracleError::MeterNotBound);
+        }
+
+        let meter = read_meter(&env, &meter_id);
+        if mwh > meter.capacity_mw * 24 {
+            panic_with_error!(&env, OracleError::InvalidMeterReading);
+        }
+
+        let n = read_threshold_n(&env);
+        if signatures.len() < n {
+            panic_with_error!(&env, OracleError::ThresholdNotMet);
+        }
+
+        let mut data = Bytes::new(&env);
+        data.append(&meter_id.clone().into());
+        data.append(&Bytes::from_slice(&env, &mwh.to_be_bytes()));
+        data.append(&Bytes::from_slice(&env, &generation_timestamp.to_be_bytes()));
+
+        let reading_hash: BytesN<32> = env.crypto().sha256(&data).into();
+
+        if has_reading(&env, &reading_hash) {
+            panic_with_error!(&env, OracleError::Unauthorized); // Prevent double submission
+        }
+
+        for i in 0..signatures.len() {
+            let (pubkey, sig) = signatures.get(i).unwrap();
+            if !has_oracle(&env, &pubkey) {
+                panic_with_error!(&env, OracleError::InvalidSignature);
+            }
+            let oracle = read_oracle(&env, &pubkey);
+            if !oracle.active {
+                panic_with_error!(&env, OracleError::InvalidSignature);
+            }
+            env.crypto().ed25519_verify(&pubkey, &data, &sig);
+        }
+
+        let fuel_enum = match fuel_type {
+            0 => FuelType::Solar,
+            1 => FuelType::Wind,
+            2 => FuelType::Hydro,
+            _ => FuelType::Other,
+        };
+
+        let rec_token_addr = read_rec_token(&env);
+        let token_id: u64 = env.invoke_contract(
+            &rec_token_addr,
+            &symbol_short!("mint"),
+            (
+                meter.receiver,
+                meter.asset_id,
+                generation_timestamp,
+                fuel_enum,
+                vintage_year,
+                metadata_uri,
+            )
+            .into_val(&env),
+        );
+
+        let record = ReadingRecord {
+            reading_hash: reading_hash.clone(),
+            meter_id: meter_id.clone(),
+            mwh,
+            timestamp: generation_timestamp,
+            oracle_count: signatures.len() as u32,
+            threshold_met: true,
+            disputed: false,
+            resolved: false,
+            token_id: Some(token_id),
+        };
+        write_reading(&env, &reading_hash, &record);
+
+        env.events().publish(
+            (symbol_short!("orcl"), symbol_short!("read")),
+            (reading_hash, meter_id, mwh, signatures.len() as u32, token_id),
+        );
+
+        token_id
     }
 
     pub fn dispute(_env: Env, _reading_hash: BytesN<32>) {
