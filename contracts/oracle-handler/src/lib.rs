@@ -255,11 +255,45 @@ impl OracleHandlerContract {
         token_id
     }
 
-    pub fn dispute(_env: Env, _reading_hash: BytesN<32>) {
-        panic_with_error!(&_env, OracleError::Unauthorized);
+    pub fn dispute(env: Env, reading_hash: BytesN<32>) {
+        if !has_reading(&env, &reading_hash) {
+            panic_with_error!(&env, OracleError::OracleNotFound); // Using OracleNotFound as a generic "Not Found"
+        }
+
+        let mut record = read_reading(&env, &reading_hash);
+        if record.resolved {
+            panic_with_error!(&env, OracleError::AlreadyResolved);
+        }
+
+        record.disputed = true;
+        write_reading(&env, &reading_hash, &record);
+
+        env.events().publish(
+            (symbol_short!("orcl"), symbol_short!("disp")),
+            (reading_hash,),
+        );
     }
 
-    pub fn resolve_dispute(_env: Env, _reading_hash: BytesN<32>, _outcome: bool) {
-        panic_with_error!(&_env, OracleError::Unauthorized);
+    pub fn resolve_dispute(env: Env, reading_hash: BytesN<32>, outcome: bool) {
+        let admin = read_admin(&env);
+        admin.require_auth();
+
+        if !has_reading(&env, &reading_hash) {
+            panic_with_error!(&env, OracleError::OracleNotFound);
+        }
+
+        let mut record = read_reading(&env, &reading_hash);
+        if record.resolved {
+            panic_with_error!(&env, OracleError::AlreadyResolved);
+        }
+
+        record.resolved = true;
+        // Outcome could involve slashing or other logic, but for now we just mark as resolved.
+        write_reading(&env, &reading_hash, &record);
+
+        env.events().publish(
+            (symbol_short!("orcl"), symbol_short!("resd")),
+            (reading_hash, outcome),
+        );
     }
 }
