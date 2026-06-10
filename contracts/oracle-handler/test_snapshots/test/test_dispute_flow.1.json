@@ -53,7 +53,7 @@
               "function_name": "register_oracle",
               "args": [
                 {
-                  "bytes": "a1dd20d7b0b2710f298fc3d04e7b1f4559e8bcce7dec24ab7457e5fdf74988d2"
+                  "bytes": "eede5578e1e1206f236c735f6d3f258afd2356c4d4f9754e680bb0304ddc17e3"
                 },
                 {
                   "bytes": "68747470733a2f2f6f7261636c652e6578616d706c652e636f6d"
@@ -330,7 +330,7 @@
           "contract_data": {
             "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
             "key": {
-              "bytes": "10a1dd20d7b0b2710f298fc3d04e7b1f4559e8bcce7dec24ab7457e5fdf74988d2"
+              "bytes": "10eede5578e1e1206f236c735f6d3f258afd2356c4d4f9754e680bb0304ddc17e3"
             },
             "durability": "persistent"
           }
@@ -343,7 +343,7 @@
                 "ext": "v0",
                 "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
                 "key": {
-                  "bytes": "10a1dd20d7b0b2710f298fc3d04e7b1f4559e8bcce7dec24ab7457e5fdf74988d2"
+                  "bytes": "10eede5578e1e1206f236c735f6d3f258afd2356c4d4f9754e680bb0304ddc17e3"
                 },
                 "durability": "persistent",
                 "val": {
@@ -361,7 +361,7 @@
                         "symbol": "pubkey"
                       },
                       "val": {
-                        "bytes": "a1dd20d7b0b2710f298fc3d04e7b1f4559e8bcce7dec24ab7457e5fdf74988d2"
+                        "bytes": "eede5578e1e1206f236c735f6d3f258afd2356c4d4f9754e680bb0304ddc17e3"
                       }
                     },
                     {
