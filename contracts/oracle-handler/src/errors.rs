@@ -13,4 +13,8 @@ pub enum OracleError {
     AlreadyResolved = 8,
     DisputeWindowExpired = 9,
     ContractPaused = 10,
+    BondTooLow = 11,
+    InsufficientBond = 12,
+    NoRewardsToClaim = 13,
+    RewardPoolInsufficient = 14,
 }

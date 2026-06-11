@@ -24,6 +24,9 @@ impl OracleHandlerContract {
         write_threshold_n(&env, 1);
         write_threshold_d(&env, 1);
         write_oracle_count(&env, 0);
+        write_minimum_bond(&env, &100_000_000_000); // 100 yUSDC default
+        write_reward_per_reading(&env, &1_000_000); // 0.01 yUSDC default
+        write_reward_pool(&env, &0);
     }
 
     pub fn admin(env: Env) -> Address {
@@ -47,7 +50,7 @@ impl OracleHandlerContract {
         read_rec_token(&env)
     }
 
-    pub fn register_oracle(env: Env, pubkey: BytesN<32>, uri: Bytes) {
+    pub fn register_oracle(env: Env, pubkey: BytesN<32>, uri: Bytes, operator: Address) {
         let admin = read_admin(&env);
         admin.require_auth();
 
@@ -58,8 +61,12 @@ impl OracleHandlerContract {
         let node = OracleNode {
             pubkey: pubkey.clone(),
             uri,
-            active: true,
+            operator: operator.clone(),
+            active: false,
             registered_at: env.ledger().timestamp(),
+            stake: 0,
+            rewards: 0,
+            reputation: 0,
         };
         write_oracle(&env, &pubkey, &node);
 
@@ -68,7 +75,7 @@ impl OracleHandlerContract {
 
         env.events().publish(
             (symbol_short!("orcl"), symbol_short!("reg")),
-            (pubkey,),
+            (pubkey, operator),
         );
     }
 
@@ -115,6 +122,161 @@ impl OracleHandlerContract {
 
     pub fn threshold(env: Env) -> (u32, u32) {
         (read_threshold_n(&env), read_threshold_d(&env))
+    }
+
+    // ---------- USDC Token ----------
+
+    pub fn set_usdc_token(env: Env, addr: Address) {
+        let admin = read_admin(&env);
+        admin.require_auth();
+        write_usdc_token(&env, &addr);
+    }
+
+    pub fn usdc_token(env: Env) -> Address {
+        read_usdc_token(&env)
+    }
+
+    // ---------- Minimum Bond ----------
+
+    pub fn set_minimum_bond(env: Env, amount: i128) {
+        let admin = read_admin(&env);
+        admin.require_auth();
+        write_minimum_bond(&env, &amount);
+    }
+
+    pub fn minimum_bond(env: Env) -> i128 {
+        read_minimum_bond(&env)
+    }
+
+    // ---------- Oracle Staking ----------
+
+    pub fn deposit_bond(env: Env, pubkey: BytesN<32>, amount: i128) {
+        if !has_oracle(&env, &pubkey) {
+            panic_with_error!(&env, OracleError::OracleNotFound);
+        }
+
+        let mut node = read_oracle(&env, &pubkey);
+        node.operator.require_auth();
+
+        let min_bond = read_minimum_bond(&env);
+        let usdc_token = read_usdc_token(&env);
+
+        // Transfer yUSDC from the operator to this contract as bond
+        let _: () = env.invoke_contract(
+            &usdc_token,
+            &symbol_short!("xfer"),
+            (node.operator.clone(), env.current_contract_address(), amount).into_val(&env),
+        );
+
+        node.stake += amount;
+        if node.stake >= min_bond && !node.active {
+            node.active = true;
+        }
+        write_oracle(&env, &pubkey, &node);
+
+        env.events().publish(
+            (symbol_short!("orcl"), symbol_short!("bond")),
+            (pubkey, node.stake, node.active),
+        );
+    }
+
+    pub fn withdraw_bond(env: Env, pubkey: BytesN<32>, amount: i128) {
+        if !has_oracle(&env, &pubkey) {
+            panic_with_error!(&env, OracleError::OracleNotFound);
+        }
+
+        let mut node = read_oracle(&env, &pubkey);
+        node.operator.require_auth();
+
+        if amount > node.stake {
+            panic_with_error!(&env, OracleError::InsufficientBond);
+        }
+
+        let usdc_token = read_usdc_token(&env);
+        let _: () = env.invoke_contract(
+            &usdc_token,
+            &symbol_short!("xfer"),
+            (env.current_contract_address(), node.operator.clone(), amount).into_val(&env),
+        );
+
+        node.stake -= amount;
+        let min_bond = read_minimum_bond(&env);
+        if node.stake < min_bond && node.active {
+            node.active = false;
+        }
+        write_oracle(&env, &pubkey, &node);
+
+        env.events().publish(
+            (symbol_short!("orcl"), symbol_short!("unbd")),
+            (pubkey, node.stake),
+        );
+    }
+
+    // ---------- Reward Per Reading ----------
+
+    pub fn set_reward_per_reading(env: Env, amount: i128) {
+        let admin = read_admin(&env);
+        admin.require_auth();
+        write_reward_per_reading(&env, &amount);
+    }
+
+    pub fn reward_per_reading(env: Env) -> i128 {
+        read_reward_per_reading(&env)
+    }
+
+    // ---------- Reward Pool ----------
+
+    pub fn fund_reward_pool(env: Env, amount: i128) {
+        let admin = read_admin(&env);
+        admin.require_auth();
+
+        let usdc_token = read_usdc_token(&env);
+        let _: () = env.invoke_contract(
+            &usdc_token,
+            &symbol_short!("xfer"),
+            (admin.clone(), env.current_contract_address(), amount).into_val(&env),
+        );
+
+        let pool = read_reward_pool(&env) + amount;
+        write_reward_pool(&env, &pool);
+
+        env.events().publish(
+            (symbol_short!("orcl"), symbol_short!("fund")),
+            (amount, pool),
+        );
+    }
+
+    pub fn reward_pool(env: Env) -> i128 {
+        read_reward_pool(&env)
+    }
+
+    pub fn claim_rewards(env: Env, pubkey: BytesN<32>) {
+        if !has_oracle(&env, &pubkey) {
+            panic_with_error!(&env, OracleError::OracleNotFound);
+        }
+
+        let mut node = read_oracle(&env, &pubkey);
+        node.operator.require_auth();
+
+        if node.rewards <= 0 {
+            panic_with_error!(&env, OracleError::NoRewardsToClaim);
+        }
+
+        let amount = node.rewards;
+        node.rewards = 0;
+        write_oracle(&env, &pubkey, &node);
+
+        let usdc_token = read_usdc_token(&env);
+        let _: () = env.invoke_contract(
+            &usdc_token,
+            &symbol_short!("xfer"),
+            (env.current_contract_address(), node.operator.clone(), amount).into_val(&env),
+        );
+
+        env.events().publish(
+            (symbol_short!("orcl"), symbol_short!("rewd")),
+            (pubkey, amount),
+        );
     }
 
     pub fn set_meter(env: Env, meter_id: BytesN<32>, receiver: Address, asset_id: BytesN<32>, capacity_mw: u64) {
@@ -200,6 +362,8 @@ impl OracleHandlerContract {
             panic_with_error!(&env, OracleError::Unauthorized); // Prevent double submission
         }
 
+        let min_bond = read_minimum_bond(&env);
+        let mut oracle_list: soroban_sdk::Vec<BytesN<32>> = soroban_sdk::Vec::new(&env);
         for i in 0..signatures.len() {
             let (pubkey, sig) = signatures.get(i).unwrap();
             if !has_oracle(&env, &pubkey) {
@@ -209,7 +373,11 @@ impl OracleHandlerContract {
             if !oracle.active {
                 panic_with_error!(&env, OracleError::InvalidSignature);
             }
+            if oracle.stake < min_bond {
+                panic_with_error!(&env, OracleError::BondTooLow);
+            }
             env.crypto().ed25519_verify(&pubkey, &data, &sig);
+            oracle_list.push_back(pubkey);
         }
 
         let fuel_enum = match fuel_type {
@@ -244,8 +412,26 @@ impl OracleHandlerContract {
             disputed: false,
             resolved: false,
             token_id: Some(token_id),
+            oracles: oracle_list,
         };
         write_reading(&env, &reading_hash, &record);
+
+        // Distribute rewards to participating oracles
+        let reward_per = read_reward_per_reading(&env);
+        let mut pool = read_reward_pool(&env);
+        let num_oracles = signatures.len() as i128;
+        let total_reward = reward_per * num_oracles;
+        if pool >= total_reward && num_oracles > 0 {
+            pool -= total_reward;
+            write_reward_pool(&env, &pool);
+            for i in 0..signatures.len() {
+                let (pubkey, _) = signatures.get(i).unwrap();
+                let mut oracle = read_oracle(&env, &pubkey);
+                oracle.rewards += reward_per;
+                oracle.reputation = oracle.reputation.saturating_add(1);
+                write_oracle(&env, &pubkey, &oracle);
+            }
+        }
 
         env.events().publish(
             (symbol_short!("orcl"), symbol_short!("read")),
@@ -288,7 +474,38 @@ impl OracleHandlerContract {
         }
 
         record.resolved = true;
-        // Outcome could involve slashing or other logic, but for now we just mark as resolved.
+
+        // If outcome is false (reading was fraudulent), slash all signing oracles
+        if !outcome {
+            let usdc_token = read_usdc_token(&env);
+            let admin = read_admin(&env);
+            for i in 0..record.oracles.len() {
+                let pubkey = record.oracles.get(i).unwrap();
+                let mut oracle = read_oracle(&env, &pubkey);
+                if oracle.stake > 0 {
+                    let slash_amount = oracle.stake;
+                    oracle.stake = 0;
+                    // Transfer slashed stake to admin as penalty
+                    let _: () = env.invoke_contract(
+                        &usdc_token,
+                        &symbol_short!("xfer"),
+                        (env.current_contract_address(), admin.clone(), slash_amount).into_val(&env),
+                    );
+                }
+                oracle.active = false;
+                oracle.reputation = oracle.reputation.saturating_sub(10);
+                write_oracle(&env, &pubkey, &oracle);
+            }
+        } else {
+            // Reading was valid — boost reputation of honest oracles
+            for i in 0..record.oracles.len() {
+                let pubkey = record.oracles.get(i).unwrap();
+                let mut oracle = read_oracle(&env, &pubkey);
+                oracle.reputation = oracle.reputation.saturating_add(5);
+                write_oracle(&env, &pubkey, &oracle);
+            }
+        }
+
         write_reading(&env, &reading_hash, &record);
 
         env.events().publish(

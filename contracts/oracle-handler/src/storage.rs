@@ -28,6 +28,22 @@ pub fn rec_token_key() -> Symbol {
     symbol_short!("RecT")
 }
 
+pub fn usdc_token_key() -> Symbol {
+    symbol_short!("USDCT")
+}
+
+pub fn minimum_bond_key() -> Symbol {
+    symbol_short!("MinB")
+}
+
+pub fn reward_pool_key() -> Symbol {
+    symbol_short!("RewP")
+}
+
+pub fn reward_per_reading_key() -> Symbol {
+    symbol_short!("RewR")
+}
+
 // ---------- Admin ----------
 
 pub fn write_admin(env: &Env, admin: &Address) {
@@ -84,6 +100,46 @@ pub fn write_rec_token(env: &Env, addr: &Address) {
 
 pub fn read_rec_token(env: &Env) -> Address {
     env.storage().instance().get(&rec_token_key()).unwrap()
+}
+
+// ---------- USDC token address ----------
+
+pub fn write_usdc_token(env: &Env, addr: &Address) {
+    env.storage().instance().set(&usdc_token_key(), addr);
+}
+
+pub fn read_usdc_token(env: &Env) -> Address {
+    env.storage().instance().get(&usdc_token_key()).unwrap()
+}
+
+// ---------- Minimum bond ----------
+
+pub fn write_minimum_bond(env: &Env, amount: &i128) {
+    env.storage().instance().set(&minimum_bond_key(), amount);
+}
+
+pub fn read_minimum_bond(env: &Env) -> i128 {
+    env.storage().instance().get(&minimum_bond_key()).unwrap_or(100_000_000_000) // 100 yUSDC default
+}
+
+// ---------- Reward pool ----------
+
+pub fn write_reward_pool(env: &Env, amount: &i128) {
+    env.storage().instance().set(&reward_pool_key(), amount);
+}
+
+pub fn read_reward_pool(env: &Env) -> i128 {
+    env.storage().instance().get(&reward_pool_key()).unwrap_or(0)
+}
+
+// ---------- Reward per reading ----------
+
+pub fn write_reward_per_reading(env: &Env, amount: &i128) {
+    env.storage().instance().set(&reward_per_reading_key(), amount);
+}
+
+pub fn read_reward_per_reading(env: &Env) -> i128 {
+    env.storage().instance().get(&reward_per_reading_key()).unwrap_or(1_000_000) // 0.01 yUSDC default
 }
 
 // ---------- Oracle node storage ----------

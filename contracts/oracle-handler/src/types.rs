@@ -1,4 +1,4 @@
-use soroban_sdk::{contracttype, Address, Bytes, BytesN};
+use soroban_sdk::{contracttype, Address, Bytes, BytesN, Vec};
 
 #[derive(Clone, Debug, PartialEq)]
 #[contracttype]
@@ -14,8 +14,12 @@ pub enum FuelType {
 pub struct OracleNode {
     pub pubkey: BytesN<32>,
     pub uri: Bytes,
+    pub operator: Address,
     pub active: bool,
     pub registered_at: u64,
+    pub stake: i128,
+    pub rewards: i128,
+    pub reputation: u32,
 }
 
 #[derive(Clone, Debug)]
@@ -39,4 +43,5 @@ pub struct ReadingRecord {
     pub disputed: bool,
     pub resolved: bool,
     pub token_id: Option<u64>,
+    pub oracles: Vec<BytesN<32>>,
 }
