@@ -424,3 +424,139 @@ fn test_fee_deduction() {
     assert_eq!(fill_qty, 10);
     assert_eq!(fill_price, 100_000_000);
 }
+
+// ---------- CfD Tests ----------
+
+macro_rules! setup_cfd {
+    ($env:ident, $client:ident, $admin:ident, $usdc_id:ident) => {
+        let $env = Env::default();
+        let $admin = Address::generate(&$env);
+        $env.mock_all_auths();
+
+        let usdc_contract_id = $env.register(mock_usdc::MockUsdc, (&$admin,));
+        let $usdc_id = usdc_contract_id.clone();
+        let $usdc_id: Address = $usdc_id;
+
+        let contract_id = $env.register(MarketplaceContract, (&$admin,));
+        let $client = MarketplaceContractClient::new(&$env, &contract_id);
+
+        $client.set_usdc_token(&$usdc_id);
+    };
+}
+
+#[test]
+fn test_open_cfd() {
+    setup_cfd!(env, client, _admin, _usdc_id);
+
+    let trader = Address::generate(&env);
+    let strike = 40_000_000i128; // $40 per REC
+    let qty = 5_000u64;
+    let expiry = env.ledger().timestamp() + 86400 * 365; // 1 year
+    let notional = (qty as i128) * strike; // 200_000_000_000
+    let collateral = notional * 1500 / 10000; // 15% = 30_000_000_000
+
+    let pos_id = client.open_cfd(&trader, &strike, &qty, &expiry, &collateral);
+    assert_eq!(pos_id, 1);
+
+    let pos = client.get_cfd(&pos_id);
+    assert_eq!(pos.position_id, 1);
+    assert_eq!(pos.counterparty_a, trader);
+    assert_eq!(pos.counterparty_b, None);
+    assert_eq!(pos.strike_price, strike);
+    assert_eq!(pos.quantity, qty);
+    assert_eq!(pos.settlement_date, expiry);
+    assert_eq!(pos.collateral_a, collateral);
+    assert_eq!(pos.collateral_b, 0);
+    assert_eq!(pos.state, crate::PositionState::Pending);
+}
+
+#[test]
+fn test_accept_cfd() {
+    setup_cfd!(env, client, _admin, _usdc_id);
+
+    let producer = Address::generate(&env);
+    let offtaker = Address::generate(&env);
+    let strike = 40_000_000i128;
+    let qty = 5_000u64;
+    let expiry = env.ledger().timestamp() + 86400 * 365;
+    let notional = (qty as i128) * strike;
+    let collateral = notional * 1500 / 10000;
+
+    let pos_id = client.open_cfd(&producer, &strike, &qty, &expiry, &collateral);
+    client.accept_cfd(&offtaker, &pos_id, &collateral);
+
+    let pos = client.get_cfd(&pos_id);
+    assert_eq!(pos.counterparty_b, Some(offtaker));
+    assert_eq!(pos.collateral_b, collateral);
+    assert_eq!(pos.state, crate::PositionState::Active);
+}
+
+#[test]
+fn test_add_collateral() {
+    setup_cfd!(env, client, _admin, _usdc_id);
+
+    let producer = Address::generate(&env);
+    let offtaker = Address::generate(&env);
+    let strike = 40_000_000i128;
+    let qty = 5_000u64;
+    let expiry = env.ledger().timestamp() + 86400 * 365;
+    let notional = (qty as i128) * strike;
+    let collateral = notional * 1500 / 10000;
+
+    let pos_id = client.open_cfd(&producer, &strike, &qty, &expiry, &collateral);
+    client.accept_cfd(&offtaker, &pos_id, &collateral);
+
+    let extra_collateral = 10_000_000i128;
+    client.add_collateral(&producer, &pos_id, &extra_collateral);
+
+    let pos = client.get_cfd(&pos_id);
+    assert_eq!(pos.collateral_a, collateral + extra_collateral);
+}
+
+#[test]
+fn test_remove_collateral() {
+    setup_cfd!(env, client, _admin, _usdc_id);
+
+    let producer = Address::generate(&env);
+    let offtaker = Address::generate(&env);
+    let strike = 40_000_000i128;
+    let qty = 5_000u64;
+    let expiry = env.ledger().timestamp() + 86400 * 365;
+    let notional = (qty as i128) * strike;
+    let collateral = notional * 1500 / 10000;
+
+    let pos_id = client.open_cfd(&producer, &strike, &qty, &expiry, &collateral);
+    client.accept_cfd(&offtaker, &pos_id, &collateral);
+
+    // Post extra collateral first, then remove it
+    let extra = 50_000_000_000i128;
+    client.add_collateral(&producer, &pos_id, &extra);
+    client.remove_collateral(&producer, &pos_id, &extra);
+
+    let pos = client.get_cfd(&pos_id);
+    assert_eq!(pos.collateral_a, collateral);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #9)")]
+fn test_cfd_insufficient_collateral_rejected() {
+    setup_cfd!(env, client, _admin, _usdc_id);
+
+    let trader = Address::generate(&env);
+    let strike = 40_000_000i128;
+    let qty = 5_000u64;
+    let expiry = env.ledger().timestamp() + 86400 * 365;
+
+    // Only 1% collateral instead of 15%
+    let too_low = 1_000_000i128;
+    client.open_cfd(&trader, &strike, &qty, &expiry, &too_low);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #11)")]
+fn test_cfd_nonexistent_position_rejected() {
+    setup_cfd!(env, client, _admin, _usdc_id);
+
+    let caller = Address::generate(&env);
+    client.accept_cfd(&caller, &999u64, &100_000_000i128);
+}
