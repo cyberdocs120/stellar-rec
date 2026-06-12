@@ -1,6 +1,6 @@
 use soroban_sdk::{symbol_short, Address, Bytes, Env, Symbol};
 
-use crate::types::Order;
+use crate::types::{CfDPosition, Order};
 
 pub fn admin_key() -> Symbol {
     symbol_short!("Admin")
@@ -95,5 +95,43 @@ pub fn read_order(env: &Env, order_id: u64) -> Order {
 
 pub fn has_order(env: &Env, order_id: u64) -> bool {
     let key = order_storage_key(env, order_id);
+    env.storage().persistent().has(&key)
+}
+
+// ---------- CfD Position Storage ----------
+
+pub fn position_counter_key() -> Symbol {
+    symbol_short!("PosCN")
+}
+
+pub fn write_position_counter(env: &Env, counter: u64) {
+    env.storage().instance().set(&position_counter_key(), &counter);
+}
+
+pub fn read_position_counter(env: &Env) -> u64 {
+    env.storage().instance().get(&position_counter_key()).unwrap_or(0)
+}
+
+pub fn position_storage_key(env: &Env, position_id: u64) -> Bytes {
+    let mut key = Bytes::new(env);
+    key.push_back(0x20);
+    for b in position_id.to_be_bytes() {
+        key.push_back(b);
+    }
+    key
+}
+
+pub fn write_position(env: &Env, position_id: u64, position: &CfDPosition) {
+    let key = position_storage_key(env, position_id);
+    env.storage().persistent().set(&key, position);
+}
+
+pub fn read_position(env: &Env, position_id: u64) -> CfDPosition {
+    let key = position_storage_key(env, position_id);
+    env.storage().persistent().get(&key).unwrap()
+}
+
+pub fn has_position(env: &Env, position_id: u64) -> bool {
+    let key = position_storage_key(env, position_id);
     env.storage().persistent().has(&key)
 }

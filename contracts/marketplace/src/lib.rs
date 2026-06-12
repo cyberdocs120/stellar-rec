@@ -13,6 +13,9 @@ use errors::MarketError;
 use storage::*;
 use types::*;
 
+const INITIAL_MARGIN_BPS: u32 = 1500; // 15%
+const MAINTENANCE_MARGIN_BPS: u32 = 1000; // 10%
+
 fn transfer_rec(env: &Env, rec_id: &Address, from: &Address, to: &Address, token_id: u64) {
     let _: () = env.invoke_contract(
         rec_id,
@@ -265,5 +268,200 @@ impl MarketplaceContract {
             }
         }
         count
+    }
+
+    // ---------- CfD Functions ----------
+
+    pub fn open_cfd(
+        env: Env,
+        caller: Address,
+        strike: i128,
+        qty: u64,
+        expiry: u64,
+        collateral: i128,
+    ) -> u64 {
+        caller.require_auth();
+
+        if strike <= 0 || qty == 0 || expiry <= env.ledger().timestamp() || collateral <= 0 {
+            panic_with_error!(&env, MarketError::InvalidQuantity);
+        }
+
+        let notional = (qty as i128) * strike;
+        let min_collateral = notional * (INITIAL_MARGIN_BPS as i128) / 10000;
+        if collateral < min_collateral {
+            panic_with_error!(&env, MarketError::InsufficientCollateral);
+        }
+
+        let usdc_id = read_usdc_token(&env);
+        let _: () = env.invoke_contract(
+            &usdc_id,
+            &symbol_short!("xfer"),
+            (caller.clone(), env.current_contract_address(), collateral).into_val(&env),
+        );
+
+        let counter = read_position_counter(&env) + 1;
+        write_position_counter(&env, counter);
+
+        let position = CfDPosition {
+            position_id: counter,
+            counterparty_a: caller,
+            counterparty_b: None,
+            strike_price: strike,
+            quantity: qty,
+            settlement_date: expiry,
+            collateral_a: collateral,
+            collateral_b: 0,
+            maintenance_margin_bps: MAINTENANCE_MARGIN_BPS,
+            state: PositionState::Pending,
+            last_mtm_timestamp: 0,
+            mtm_value: 0,
+        };
+        write_position(&env, counter, &position);
+
+        counter
+    }
+
+    pub fn accept_cfd(env: Env, caller: Address, position_id: u64, collateral: i128) {
+        caller.require_auth();
+
+        if !has_position(&env, position_id) {
+            panic_with_error!(&env, MarketError::PositionNotFound);
+        }
+
+        let mut position = read_position(&env, position_id);
+        if position.state != PositionState::Pending {
+            panic_with_error!(&env, MarketError::PositionNotActive);
+        }
+        if position.counterparty_a == caller {
+            panic_with_error!(&env, MarketError::Unauthorized);
+        }
+
+        if collateral <= 0 {
+            panic_with_error!(&env, MarketError::InsufficientCollateral);
+        }
+
+        let notional = (position.quantity as i128) * position.strike_price;
+        let min_collateral = notional * (INITIAL_MARGIN_BPS as i128) / 10000;
+        if collateral < min_collateral {
+            panic_with_error!(&env, MarketError::InsufficientCollateral);
+        }
+
+        let usdc_id = read_usdc_token(&env);
+        let _: () = env.invoke_contract(
+            &usdc_id,
+            &symbol_short!("xfer"),
+            (caller.clone(), env.current_contract_address(), collateral).into_val(&env),
+        );
+
+        let counterparty_b = caller.clone();
+        position.counterparty_b = Some(caller);
+        position.collateral_b = collateral;
+        position.state = PositionState::Active;
+        write_position(&env, position_id, &position);
+
+        env.events().publish(
+            (symbol_short!("mkt"), symbol_short!("cfdo")),
+            (
+                position_id,
+                position.counterparty_a,
+                counterparty_b,
+                position.strike_price,
+                position.quantity,
+                position.settlement_date,
+            ),
+        );
+    }
+
+    pub fn add_collateral(env: Env, caller: Address, position_id: u64, amount: i128) {
+        caller.require_auth();
+
+        if !has_position(&env, position_id) {
+            panic_with_error!(&env, MarketError::PositionNotFound);
+        }
+
+        let mut position = read_position(&env, position_id);
+        if position.state != PositionState::Active {
+            panic_with_error!(&env, MarketError::PositionNotActive);
+        }
+
+        if amount <= 0 {
+            panic_with_error!(&env, MarketError::InsufficientCollateral);
+        }
+
+        if caller == position.counterparty_a {
+            position.collateral_a += amount;
+        } else if Some(caller.clone()) == position.counterparty_b {
+            position.collateral_b += amount;
+        } else {
+            panic_with_error!(&env, MarketError::Unauthorized);
+        }
+
+        let usdc_id = read_usdc_token(&env);
+        let _: () = env.invoke_contract(
+            &usdc_id,
+            &symbol_short!("xfer"),
+            (caller, env.current_contract_address(), amount).into_val(&env),
+        );
+
+        write_position(&env, position_id, &position);
+    }
+
+    pub fn remove_collateral(env: Env, caller: Address, position_id: u64, amount: i128) {
+        caller.require_auth();
+
+        if !has_position(&env, position_id) {
+            panic_with_error!(&env, MarketError::PositionNotFound);
+        }
+
+        let mut position = read_position(&env, position_id);
+        if position.state != PositionState::Active {
+            panic_with_error!(&env, MarketError::PositionNotActive);
+        }
+
+        if amount <= 0 {
+            panic_with_error!(&env, MarketError::InsufficientCollateral);
+        }
+
+        if caller == position.counterparty_a {
+            if amount > position.collateral_a {
+                panic_with_error!(&env, MarketError::InsufficientCollateral);
+            }
+            let remaining = position.collateral_a - amount;
+            let notional = (position.quantity as i128) * position.strike_price;
+            let min_collateral = notional * (INITIAL_MARGIN_BPS as i128) / 10000;
+            if remaining < min_collateral {
+                panic_with_error!(&env, MarketError::CollateralBelowMaintenance);
+            }
+            position.collateral_a = remaining;
+        } else if Some(caller.clone()) == position.counterparty_b {
+            if amount > position.collateral_b {
+                panic_with_error!(&env, MarketError::InsufficientCollateral);
+            }
+            let remaining = position.collateral_b - amount;
+            let notional = (position.quantity as i128) * position.strike_price;
+            let min_collateral = notional * (INITIAL_MARGIN_BPS as i128) / 10000;
+            if remaining < min_collateral {
+                panic_with_error!(&env, MarketError::CollateralBelowMaintenance);
+            }
+            position.collateral_b = remaining;
+        } else {
+            panic_with_error!(&env, MarketError::Unauthorized);
+        }
+
+        let usdc_id = read_usdc_token(&env);
+        let _: () = env.invoke_contract(
+            &usdc_id,
+            &symbol_short!("xfer"),
+            (env.current_contract_address(), caller, amount).into_val(&env),
+        );
+
+        write_position(&env, position_id, &position);
+    }
+
+    pub fn get_cfd(env: Env, position_id: u64) -> CfDPosition {
+        if !has_position(&env, position_id) {
+            panic_with_error!(&env, MarketError::PositionNotFound);
+        }
+        read_position(&env, position_id)
     }
 }

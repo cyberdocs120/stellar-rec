@@ -37,3 +37,30 @@ pub struct Order {
     pub vintage_filter: Option<u32>,
     pub status: OrderStatus,
 }
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+#[contracttype]
+pub enum PositionState {
+    Pending = 0,
+    Active = 1,
+    Settled = 2,
+    Expired = 3,
+    Liquidated = 4,
+}
+
+#[derive(Clone, Debug)]
+#[contracttype]
+pub struct CfDPosition {
+    pub position_id: u64,
+    pub counterparty_a: Address,
+    pub counterparty_b: Option<Address>,
+    pub strike_price: i128,
+    pub quantity: u64,
+    pub settlement_date: u64,
+    pub collateral_a: i128,
+    pub collateral_b: i128,
+    pub maintenance_margin_bps: u32,
+    pub state: PositionState,
+    pub last_mtm_timestamp: u64,
+    pub mtm_value: i128,
+}

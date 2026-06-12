@@ -11,4 +11,9 @@ pub enum MarketError {
     FeeCapExceeded = 6,
     VintageMismatch = 7,
     InvalidQuantity = 8,
+    InsufficientCollateral = 9,
+    CollateralBelowMaintenance = 10,
+    PositionNotFound = 11,
+    PositionNotActive = 12,
+    CfDAlreadySettled = 13,
 }
