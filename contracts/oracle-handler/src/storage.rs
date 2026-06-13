@@ -44,6 +44,10 @@ pub fn reward_per_reading_key() -> Symbol {
     symbol_short!("RewR")
 }
 
+pub fn price_key() -> Symbol {
+    symbol_short!("Price")
+}
+
 // ---------- Admin ----------
 
 pub fn write_admin(env: &Env, admin: &Address) {
@@ -140,6 +144,16 @@ pub fn write_reward_per_reading(env: &Env, amount: &i128) {
 
 pub fn read_reward_per_reading(env: &Env) -> i128 {
     env.storage().instance().get(&reward_per_reading_key()).unwrap_or(1_000_000) // 0.01 yUSDC default
+}
+
+// ---------- Price ----------
+
+pub fn write_price(env: &Env, price: i128) {
+    env.storage().instance().set(&price_key(), &price);
+}
+
+pub fn read_price(env: &Env) -> i128 {
+    env.storage().instance().get(&price_key()).unwrap_or(0)
 }
 
 // ---------- Oracle node storage ----------

@@ -250,6 +250,20 @@ impl OracleHandlerContract {
         read_reward_pool(&env)
     }
 
+    pub fn set_price(env: Env, price: i128) {
+        let admin = read_admin(&env);
+        admin.require_auth();
+        write_price(&env, price);
+        env.events().publish(
+            (symbol_short!("orcl"), symbol_short!("prce")),
+            (price,),
+        );
+    }
+
+    pub fn get_price(env: Env) -> i128 {
+        read_price(&env)
+    }
+
     pub fn claim_rewards(env: Env, pubkey: BytesN<32>) {
         if !has_oracle(&env, &pubkey) {
             panic_with_error!(&env, OracleError::OracleNotFound);
