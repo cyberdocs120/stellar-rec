@@ -1,4 +1,4 @@
-use soroban_sdk::{testutils::Address as _, Address, Env};
+use soroban_sdk::{testutils::Address as _, testutils::Ledger as _, Address, Env};
 
 use crate::{MarketplaceContract, MarketplaceContractClient, OrderSide, OrderStatus};
 
@@ -27,6 +27,26 @@ mod mock_rec {
         pub fn __constructor(_env: Env, _admin: Address) {}
 
         pub fn transfer(_env: Env, _from: Address, _to: Address, _token_id: u64) {}
+    }
+}
+
+mod mock_oracle_handler {
+    use soroban_sdk::{contract, contractimpl, Env};
+
+    #[contract]
+    pub struct MockOracleHandler;
+
+    #[contractimpl]
+    impl MockOracleHandler {
+        pub fn __constructor(_env: Env) {}
+
+        pub fn get_price(env: Env) -> i128 {
+            env.storage().instance().get(&soroban_sdk::symbol_short!("Price")).unwrap_or(0)
+        }
+
+        pub fn set_price(env: Env, price: i128) {
+            env.storage().instance().set(&soroban_sdk::symbol_short!("Price"), &price);
+        }
     }
 }
 
@@ -444,6 +464,28 @@ macro_rules! setup_cfd {
     };
 }
 
+macro_rules! setup_cfd_full {
+    ($env:ident, $client:ident, $admin:ident, $usdc_id:ident, $oracle_id:ident) => {
+        let $env = Env::default();
+        let $admin = Address::generate(&$env);
+        $env.mock_all_auths();
+
+        let usdc_contract_id = $env.register(mock_usdc::MockUsdc, (&$admin,));
+        let $usdc_id = usdc_contract_id.clone();
+        let $usdc_id: Address = $usdc_id;
+
+        let oracle_contract_id = $env.register(mock_oracle_handler::MockOracleHandler, ());
+        let $oracle_id = oracle_contract_id.clone();
+        let $oracle_id: Address = $oracle_id;
+
+        let contract_id = $env.register(MarketplaceContract, (&$admin,));
+        let $client = MarketplaceContractClient::new(&$env, &contract_id);
+
+        $client.set_usdc_token(&$usdc_id);
+        $client.set_oracle_handler(&$oracle_id);
+    };
+}
+
 #[test]
 fn test_open_cfd() {
     setup_cfd!(env, client, _admin, _usdc_id);
@@ -550,6 +592,60 @@ fn test_cfd_insufficient_collateral_rejected() {
     // Only 1% collateral instead of 15%
     let too_low = 1_000_000i128;
     client.open_cfd(&trader, &strike, &qty, &expiry, &too_low);
+}
+
+#[test]
+fn test_settle_cfd() {
+    setup_cfd_full!(env, client, _admin, _usdc_id, oracle_id);
+
+    let producer = Address::generate(&env);
+    let offtaker = Address::generate(&env);
+    let strike = 40_000_000i128;
+    let qty = 5_000u64;
+    let expiry = env.ledger().timestamp() + 86400;
+    let collateral = (qty as i128) * strike * 1500 / 10000;
+
+    let pos_id = client.open_cfd(&producer, &strike, &qty, &expiry, &collateral);
+    client.accept_cfd(&offtaker, &pos_id, &collateral);
+
+    // Jump to expiry
+    env.ledger().set_timestamp(expiry + 1);
+
+    // Set spot price to $45 (A pays B)
+    let oracle_client = mock_oracle_handler::MockOracleHandlerClient::new(&env, &oracle_id);
+    oracle_client.set_price(&45_000_000i128);
+
+    client.settle_cfd(&producer, &pos_id);
+
+    let pos = client.get_cfd(&pos_id);
+    assert_eq!(pos.state, crate::PositionState::Settled);
+    assert_eq!(pos.mtm_value, 5_000 * 5_000_000); // (45-40) * 5000 = 25,000,000,000
+}
+
+#[test]
+fn test_liquidate_cfd() {
+    setup_cfd_full!(env, client, _admin, _usdc_id, oracle_id);
+
+    let producer = Address::generate(&env);
+    let offtaker = Address::generate(&env);
+    let strike = 40_000_000i128;
+    let qty = 5_000u64;
+    let expiry = env.ledger().timestamp() + 86400 * 365;
+    let collateral = (qty as i128) * strike * 1500 / 10000; // 30,000,000,000
+
+    let pos_id = client.open_cfd(&producer, &strike, &qty, &expiry, &collateral);
+    client.accept_cfd(&offtaker, &pos_id, &collateral);
+
+    // Set spot price to $50 (Huge loss for A)
+    // Payoff = (50 - 40) * 5000 = 50,000,000,000
+    // A's current value = 30k - 50k = -20k (Bankrupt)
+    let oracle_client = mock_oracle_handler::MockOracleHandlerClient::new(&env, &oracle_id);
+    oracle_client.set_price(&50_000_000i128);
+
+    client.liquidate(&offtaker, &pos_id);
+
+    let pos = client.get_cfd(&pos_id);
+    assert_eq!(pos.state, crate::PositionState::Liquidated);
 }
 
 #[test]

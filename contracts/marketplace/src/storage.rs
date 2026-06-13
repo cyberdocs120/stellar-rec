@@ -26,6 +26,10 @@ pub fn fee_vault_key() -> Symbol {
     symbol_short!("FVal")
 }
 
+pub fn oracle_handler_key() -> Symbol {
+    symbol_short!("OraH")
+}
+
 pub fn write_admin(env: &Env, admin: &Address) {
     env.storage().instance().set(&admin_key(), admin);
 }
@@ -72,6 +76,14 @@ pub fn write_fee_vault(env: &Env, addr: &Address) {
 
 pub fn read_fee_vault(env: &Env) -> Address {
     env.storage().instance().get(&fee_vault_key()).unwrap()
+}
+
+pub fn write_oracle_handler(env: &Env, addr: &Address) {
+    env.storage().instance().set(&oracle_handler_key(), addr);
+}
+
+pub fn read_oracle_handler(env: &Env) -> Address {
+    env.storage().instance().get(&oracle_handler_key()).unwrap()
 }
 
 pub fn order_storage_key(env: &Env, order_id: u64) -> Bytes {

@@ -98,6 +98,16 @@ impl MarketplaceContract {
         read_fee_vault(&env)
     }
 
+    pub fn set_oracle_handler(env: Env, addr: Address) {
+        let admin = read_admin(&env);
+        admin.require_auth();
+        write_oracle_handler(&env, &addr);
+    }
+
+    pub fn oracle_handler(env: Env) -> Address {
+        read_oracle_handler(&env)
+    }
+
     pub fn place_order(
         env: Env,
         trader: Address,
@@ -318,6 +328,11 @@ impl MarketplaceContract {
         };
         write_position(&env, counter, &position);
 
+        env.events().publish(
+            (symbol_short!("mkt"), symbol_short!("cfdp")),
+            (counter, position.counterparty_a, strike, qty, expiry),
+        );
+
         counter
     }
 
@@ -400,10 +415,15 @@ impl MarketplaceContract {
         let _: () = env.invoke_contract(
             &usdc_id,
             &symbol_short!("xfer"),
-            (caller, env.current_contract_address(), amount).into_val(&env),
+            (caller.clone(), env.current_contract_address(), amount).into_val(&env),
         );
 
         write_position(&env, position_id, &position);
+
+        env.events().publish(
+            (symbol_short!("mkt"), symbol_short!("cfda")),
+            (position_id, caller, amount),
+        );
     }
 
     pub fn remove_collateral(env: Env, caller: Address, position_id: u64, amount: i128) {
@@ -452,10 +472,15 @@ impl MarketplaceContract {
         let _: () = env.invoke_contract(
             &usdc_id,
             &symbol_short!("xfer"),
-            (env.current_contract_address(), caller, amount).into_val(&env),
+            (env.current_contract_address(), caller.clone(), amount).into_val(&env),
         );
 
         write_position(&env, position_id, &position);
+
+        env.events().publish(
+            (symbol_short!("mkt"), symbol_short!("cfdr")),
+            (position_id, caller, amount),
+        );
     }
 
     pub fn get_cfd(env: Env, position_id: u64) -> CfDPosition {
@@ -463,5 +488,172 @@ impl MarketplaceContract {
             panic_with_error!(&env, MarketError::PositionNotFound);
         }
         read_position(&env, position_id)
+    }
+
+    pub fn settle_cfd(env: Env, caller: Address, position_id: u64) {
+        caller.require_auth();
+
+        if !has_position(&env, position_id) {
+            panic_with_error!(&env, MarketError::PositionNotFound);
+        }
+
+        let mut position = read_position(&env, position_id);
+        if position.state != PositionState::Active {
+            panic_with_error!(&env, MarketError::PositionNotActive);
+        }
+
+        if env.ledger().timestamp() < position.settlement_date {
+            panic_with_error!(&env, MarketError::PositionNotActive); // Using NotActive as generic "Not Ready"
+        }
+
+        // Fetch spot price from Oracle Handler
+        let oracle_handler = read_oracle_handler(&env);
+        let spot_price: i128 = env.invoke_contract(
+            &oracle_handler,
+            &symbol_short!("get_price"),
+            ().into_val(&env),
+        );
+
+        if spot_price <= 0 {
+            panic_with_error!(&env, MarketError::PriceMismatch);
+        }
+
+        let strike = position.strike_price;
+        let qty = position.quantity as i128;
+        let diff = spot_price - strike;
+        let payoff = diff * qty;
+
+        let usdc_id = read_usdc_token(&env);
+        let mut final_a = position.collateral_a;
+        let mut final_b = position.collateral_b;
+
+        if payoff > 0 {
+            // A pays B
+            if payoff > final_a {
+                // A is bankrupt
+                final_b += final_a;
+                final_a = 0;
+            } else {
+                final_a -= payoff;
+                final_b += payoff;
+            }
+        } else if payoff < 0 {
+            // B pays A
+            let abs_payoff = -payoff;
+            if abs_payoff > final_b {
+                // B is bankrupt
+                final_a += final_b;
+                final_b = 0;
+            } else {
+                final_b -= abs_payoff;
+                final_a += abs_payoff;
+            }
+        }
+
+        // Return collateral to parties
+        if final_a > 0 {
+            transfer_usdc(&env, &usdc_id, &env.current_contract_address(), &position.counterparty_a, final_a);
+        }
+        if final_b > 0 {
+            let b_addr = position.counterparty_b.clone().unwrap();
+            transfer_usdc(&env, &usdc_id, &env.current_contract_address(), &b_addr, final_b);
+        }
+
+        position.state = PositionState::Settled;
+        position.last_mtm_timestamp = env.ledger().timestamp();
+        position.mtm_value = payoff;
+        write_position(&env, position_id, &position);
+
+        env.events().publish(
+            (symbol_short!("mkt"), symbol_short!("cfds")),
+            (position_id, spot_price, payoff),
+        );
+    }
+
+    pub fn liquidate(env: Env, caller: Address, position_id: u64) {
+        caller.require_auth();
+
+        if !has_position(&env, position_id) {
+            panic_with_error!(&env, MarketError::PositionNotFound);
+        }
+
+        let mut position = read_position(&env, position_id);
+        if position.state != PositionState::Active {
+            panic_with_error!(&env, MarketError::PositionNotActive);
+        }
+
+        // Fetch spot price from Oracle Handler
+        let oracle_handler = read_oracle_handler(&env);
+        let spot_price: i128 = env.invoke_contract(
+            &oracle_handler,
+            &symbol_short!("get_price"),
+            ().into_val(&env),
+        );
+
+        let strike = position.strike_price;
+        let qty = position.quantity as i128;
+        let diff = spot_price - strike;
+        let payoff = diff * qty;
+
+        let notional = (position.quantity as i128) * position.strike_price;
+        let mm_bps = position.maintenance_margin_bps as i128;
+        let mm_amount = notional * mm_bps / 10000;
+
+        // Current value of A's collateral after unrealized P&L
+        let current_val_a = position.collateral_a - payoff;
+        let current_val_b = position.collateral_b + payoff;
+
+        let mut liquidatable = false;
+        if current_val_a < mm_amount || current_val_b < mm_amount {
+            liquidatable = true;
+        }
+
+        if !liquidatable {
+            panic_with_error!(&env, MarketError::InsufficientCollateral); // Not liquidatable yet
+        }
+
+        // Settlement logic (same as settle_cfd but marks as liquidated)
+        let usdc_id = read_usdc_token(&env);
+        let mut final_a = position.collateral_a;
+        let mut final_b = position.collateral_b;
+
+        if payoff > 0 {
+            if payoff > final_a {
+                final_b += final_a;
+                final_a = 0;
+            } else {
+                final_a -= payoff;
+                final_b += payoff;
+            }
+        } else if payoff < 0 {
+            let abs_payoff = -payoff;
+            if abs_payoff > final_b {
+                final_a += final_b;
+                final_b = 0;
+            } else {
+                final_b -= abs_payoff;
+                final_a += abs_payoff;
+            }
+        }
+
+        // In liquidation, the liquidator might get a small reward?
+        // For now, just settle it.
+        if final_a > 0 {
+            transfer_usdc(&env, &usdc_id, &env.current_contract_address(), &position.counterparty_a, final_a);
+        }
+        if final_b > 0 {
+            let b_addr = position.counterparty_b.clone().unwrap();
+            transfer_usdc(&env, &usdc_id, &env.current_contract_address(), &b_addr, final_b);
+        }
+
+        position.state = PositionState::Liquidated;
+        position.last_mtm_timestamp = env.ledger().timestamp();
+        position.mtm_value = payoff;
+        write_position(&env, position_id, &position);
+
+        env.events().publish(
+            (symbol_short!("mkt"), symbol_short!("cfdl")),
+            (position_id, spot_price, payoff),
+        );
     }
 }
