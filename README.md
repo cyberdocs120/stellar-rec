@@ -820,52 +820,129 @@ RetirementReceipt {
 
 ## 📡 Event & Error Reference
 
-### Events (all contracts emit these)
+### Events (prefix: contract-specific)
 
-| Event | Emitted By | Data |
-|-------|-----------|------|
-| `RecMinted(token_id, asset_id, generation_ts, amount)` | REC Token | Mint events |
-| `RecTransferred(token_id, from, to)` | REC Token | Transfers |
-| `RecBurned(token_id, burner)` | REC Token | Burns |
-| `ValidatedReading(reading_hash, asset_id, mwh, oracle_count)` | Oracle Handler | Verified reading |
-| `OracleRegistered(pubkey)` | Oracle Handler | New oracle |
-| `OracleRevoked(pubkey)` | Oracle Handler | Oracle removed |
-| `OrderPlaced(order_id, trader, side, price, qty)` | Marketplace | New order |
-| `OrderCancelled(order_id)` | Marketplace | Cancel |
-| `OrderFilled(order_id, fill_qty, fill_price, fee)` | Marketplace | Fill |
-| `OrderMatched(buy_id, sell_id, qty, price, fee)` | Marketplace | Match event |
-| `CfDOpened(position_id, counterparty_a, counterparty_b, strike, qty, expiry)` | Marketplace | New CfD |
-| `CfDSettled(position_id, spot_price, net_transfer)` | Marketplace | CfD close |
-| `CfDLiquidated(position_id, losing_party)` | Marketplace | Forced close |
-| `MarginCall(position_id, shortfall)` | Marketplace | Collateral alert |
-| `RecRetired(receipt_id, retirer, token_count, total_mwh, claim_period)` | Retirement | Retirement |
-| `ContractPaused(contract_id)` | All (pauseable) | Emergency |
-| `ContractResumed(contract_id)` | All (pauseable) | Resume |
-| `AdminTransferred(old_admin, new_admin)` | All | Ownership change |
+All events use a two-topic structure: `(contract_symbol, event_symbol)`. Event topics are `symbol_short!` encoded.
 
-### Error Codes
+#### REC Token — prefix `("rec", ...)`
 
-| Code | Name | Description |
-|------|------|-------------|
-| `E001` | `Unauthorized` | Caller lacks required role |
-| `E002` | `RecAlreadyRetired` | Token already burned |
-| `E003` | `InsufficientBalance` | Not enough RECs |
-| `E004` | `OrderNotFound` | Order ID doesn't exist |
-| `E005` | `OrderFullyFilled` | No remaining quantity |
-| `E006` | `PriceMismatch` | Buy price < sell price |
-| `E007` | `InsufficientCollateral` | CfD posting too low |
-| `E008` | `CollateralBelowMaintenance` | Margin call triggered |
-| `E009` | `InvalidOracleSignature` | Sig doesn't match registered oracle |
-| `E010` | `OracleThresholdNotMet` | Not enough sigs |
-| `E011` | `InvalidMeterReading` | Range check failed |
-| `E012` | `ContractPaused` | Operation not allowed while paused |
-| `E013` | `CfDNotSettled` | Position still active |
-| `E014` | `CfDAlreadySettled` | Position already closed |
-| `E015` | `VintageMismatch` | REC vintage ≠ order filter |
-| `E016` | `ArithmeticOverflow` | Safe math failure |
-| `E017` | `InvalidAssetId` | Asset not registered |
-| `E018` | `FeeCapExceeded` | Fee rate above governance max |
-| `E019` | `DisputeWindowExpired` | Challenge period passed |
+| Symbol | Data Payload | Description |
+|--------|-------------|-------------|
+| `"mint"` | `(token_id, generation_timestamp, 1u64)` | Token minted |
+| `"xfer"` | `(token_id, from, to)` | Token transferred |
+| `"burn"` | `(token_id, caller)` | Token burned |
+| `"paus"` | `()` | Contract paused |
+| `"resm"` | `()` | Contract resumed |
+
+#### Oracle Handler — prefix `("orcl", ...)`
+
+| Symbol | Data Payload | Description |
+|--------|-------------|-------------|
+| `"reg"` | `(pubkey, operator)` | Oracle registered |
+| `"rev"` | `(pubkey,)` | Oracle revoked |
+| `"bond"` | `(pubkey, stake, active)` | Bond deposited |
+| `"unbd"` | `(pubkey, stake)` | Bond withdrawn |
+| `"fund"` | `(amount, pool)` | Reward pool funded |
+| `"prce"` | `(price,)` | Reference price set |
+| `"rewd"` | `(pubkey, amount)` | Rewards claimed |
+| `"read"` | `(reading_hash, meter_id, mwh, oracle_count, token_id)` | Meter reading validated; REC minted |
+| `"disp"` | `(reading_hash,)` | Dispute raised |
+| `"resd"` | `(reading_hash, outcome)` | Dispute resolved |
+| `"paus"` | `()` | Contract paused |
+| `"resm"` | `()` | Contract resumed |
+
+#### Marketplace — prefix `("mkt", ...)`
+
+| Symbol | Data Payload | Description |
+|--------|-------------|-------------|
+| `"plac"` | `(order_id, trader, side)` | Order placed |
+| `"canc"` | `(order_id,)` | Order cancelled |
+| `"matc"` | `(buy_id, sell_id, fill_qty, fill_price, fee)` | Orders matched |
+| `"cfdp"` | `(position_id, counterparty_a, strike, qty, expiry)` | CfD opened (pending) |
+| `"cfdo"` | `(position_id, cpty_a, cpty_b, strike, qty, expiry)` | CfD accepted (active) |
+| `"cfda"` | `(position_id, caller, amount)` | Collateral added |
+| `"cfdr"` | `(position_id, caller, amount)` | Collateral removed |
+| `"cfds"` | `(position_id, spot_price, payoff)` | CfD settled |
+| `"cfdl"` | `(position_id, spot_price, payoff)` | CfD liquidated |
+| `"paus"` | `()` | Contract paused |
+| `"resm"` | `()` | Contract resumed |
+
+#### Retirement — prefix `("ret", ...)`
+
+| Symbol | Data Payload | Description |
+|--------|-------------|-------------|
+| `"retr"` | `(receipt_id, retirer, token_count, total_mwh, period_start, period_end)` | RECs retired; receipt issued |
+| `"vrfy"` | `(verifier, authorized)` | Verifier set or removed |
+| `"paus"` | `()` | Contract paused |
+| `"resm"` | `()` | Contract resumed |
+
+### Error Codes (per-contract)
+
+#### REC Token (`RecTokenError`)
+
+| # | Name | Description |
+|---|------|-------------|
+| 1 | `Unauthorized` | Caller is not the owner or authorized operator |
+| 2 | `RecAlreadyRetired` | Token is already burned/retired |
+| 3 | `InsufficientBalance` | Caller does not own this token |
+| 4 | `TokenNotFound` | Token ID does not exist |
+| 5 | `DuplicateMint` | Token with same asset + timestamp already exists |
+| 6 | `ContractPaused` | Operation not allowed while paused |
+
+#### Oracle Handler (`OracleError`)
+
+| # | Name | Description |
+|---|------|-------------|
+| 1 | `Unauthorized` | Caller lacks required role |
+| 2 | `OracleAlreadyRegistered` | Public key already registered |
+| 3 | `OracleNotFound` | Oracle not found |
+| 4 | `ThresholdNotMet` | Not enough valid signatures |
+| 5 | `InvalidSignature` | Signature doesn't match registered oracle key |
+| 6 | `InvalidMeterReading` | Meter reading out of bounds |
+| 7 | `MeterNotBound` | Meter ID not registered |
+| 8 | `AlreadyResolved` | Dispute already resolved |
+| 9 | `DisputeWindowExpired` | Challenge period passed |
+| 10 | `ContractPaused` | Operation not allowed while paused |
+| 11 | `BondTooLow` | Oracle bond below minimum requirement |
+| 12 | `InsufficientBond` | Not enough bond to cover slash |
+| 13 | `NoRewardsToClaim` | No accumulated rewards for oracle |
+| 14 | `RewardPoolInsufficient` | Reward pool balance too low |
+
+#### Marketplace (`MarketError`)
+
+| # | Name | Description |
+|---|------|-------------|
+| 1 | `Unauthorized` | Caller lacks required role |
+| 2 | `OrderNotFound` | Order ID doesn't exist |
+| 3 | `OrderFilled` | Order already filled or cancelled |
+| 4 | `PriceMismatch` | Buy price < sell price |
+| 5 | `InsufficientBalance` | Not enough balance for trade |
+| 6 | `FeeCapExceeded` | Fee rate above governance max |
+| 7 | `VintageMismatch` | REC vintage doesn't match order filter |
+| 8 | `InvalidQuantity` | Quantity must be > 0 |
+| 9 | `InsufficientCollateral` | Collateral below initial margin |
+| 10 | `CollateralBelowMaintenance` | Margin call triggered |
+| 11 | `PositionNotFound` | CfD position doesn't exist |
+| 12 | `PositionNotActive` | Position not in active state |
+| 13 | `CfDAlreadySettled` | Position already closed |
+| 14 | `ContractPaused` | Operation not allowed while paused |
+
+#### Retirement (`RetirementError`)
+
+| # | Name | Description |
+|---|------|-------------|
+| 1 | `Unauthorized` | Caller lacks required role |
+| 2 | `AlreadyRetired` | Token already retired |
+| 3 | `TokenNotFound` | Token ID does not exist |
+| 4 | `InvalidClaimData` | Claim period or data invalid |
+| 5 | `ReceiptNotFound` | Receipt ID does not exist |
+| 6 | `NoTokensProvided` | Token list is empty |
+| 7 | `NotTokenOwner` | Caller does not own the specified token |
+| 8 | `RecTokenNotSet` | REC token contract not configured |
+| 9 | `DuplicateToken` | Same token in multiple positions of a single retire call |
+| 10 | `ContractPaused` | Operation not allowed while paused |
+| 11 | `VerifierAlreadySet` | Verifier already configured with same value |
+| 12 | `VerifierNotFound` | Address is not a registered verifier |
 
 ---
 
