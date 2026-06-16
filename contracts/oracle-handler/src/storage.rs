@@ -93,7 +93,10 @@ pub fn write_oracle_count(env: &Env, count: u32) {
 }
 
 pub fn read_oracle_count(env: &Env) -> u32 {
-    env.storage().instance().get(&oracle_count_key()).unwrap_or(0)
+    env.storage()
+        .instance()
+        .get(&oracle_count_key())
+        .unwrap_or(0)
 }
 
 // ---------- Rec token address ----------
@@ -123,7 +126,10 @@ pub fn write_minimum_bond(env: &Env, amount: &i128) {
 }
 
 pub fn read_minimum_bond(env: &Env) -> i128 {
-    env.storage().instance().get(&minimum_bond_key()).unwrap_or(100_000_000_000) // 100 yUSDC default
+    env.storage()
+        .instance()
+        .get(&minimum_bond_key())
+        .unwrap_or(100_000_000_000) // 100 yUSDC default
 }
 
 // ---------- Reward pool ----------
@@ -133,17 +139,25 @@ pub fn write_reward_pool(env: &Env, amount: &i128) {
 }
 
 pub fn read_reward_pool(env: &Env) -> i128 {
-    env.storage().instance().get(&reward_pool_key()).unwrap_or(0)
+    env.storage()
+        .instance()
+        .get(&reward_pool_key())
+        .unwrap_or(0)
 }
 
 // ---------- Reward per reading ----------
 
 pub fn write_reward_per_reading(env: &Env, amount: &i128) {
-    env.storage().instance().set(&reward_per_reading_key(), amount);
+    env.storage()
+        .instance()
+        .set(&reward_per_reading_key(), amount);
 }
 
 pub fn read_reward_per_reading(env: &Env) -> i128 {
-    env.storage().instance().get(&reward_per_reading_key()).unwrap_or(1_000_000) // 0.01 yUSDC default
+    env.storage()
+        .instance()
+        .get(&reward_per_reading_key())
+        .unwrap_or(1_000_000) // 0.01 yUSDC default
 }
 
 // ---------- Price ----------

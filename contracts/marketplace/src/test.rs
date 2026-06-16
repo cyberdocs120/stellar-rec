@@ -41,11 +41,16 @@ mod mock_oracle_handler {
         pub fn __constructor(_env: Env) {}
 
         pub fn get_price(env: Env) -> i128 {
-            env.storage().instance().get(&soroban_sdk::symbol_short!("Price")).unwrap_or(0)
+            env.storage()
+                .instance()
+                .get(&soroban_sdk::symbol_short!("Price"))
+                .unwrap_or(0)
         }
 
         pub fn set_price(env: Env, price: i128) {
-            env.storage().instance().set(&soroban_sdk::symbol_short!("Price"), &price);
+            env.storage()
+                .instance()
+                .set(&soroban_sdk::symbol_short!("Price"), &price);
         }
     }
 }
@@ -179,6 +184,35 @@ fn test_best_bid_ask() {
     let best_ask = client.get_best_ask();
     assert!(best_ask.is_some());
     assert_eq!(best_ask.unwrap().price, 90_000_000);
+}
+
+#[test]
+fn test_pause_resume() {
+    setup!(env, client, _admin);
+
+    assert!(!client.paused());
+    client.pause();
+    assert!(client.paused());
+    client.resume();
+    assert!(!client.paused());
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #14)")]
+fn test_place_order_while_paused_rejected() {
+    setup!(env, client, _admin);
+
+    env.mock_all_auths();
+    let trader = Address::generate(&env);
+    client.pause();
+    client.place_order(
+        &trader,
+        &OrderSide::Buy,
+        &100_000_000i128,
+        &10u64,
+        &crate::OrderRestriction::None,
+        &None,
+    );
 }
 
 #[test]

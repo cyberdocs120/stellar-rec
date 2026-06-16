@@ -24,6 +24,10 @@ pub fn authorized_burner_key() -> Symbol {
     symbol_short!("ABrn")
 }
 
+pub fn paused_key() -> Symbol {
+    symbol_short!("Paus")
+}
+
 // ---------- Admin ----------
 
 pub fn write_admin(env: &Env, admin: &Address) {
@@ -41,11 +45,16 @@ pub fn has_admin(env: &Env) -> bool {
 // ---------- Token ID counter ----------
 
 pub fn write_token_id_counter(env: &Env, counter: u64) {
-    env.storage().instance().set(&token_id_counter_key(), &counter);
+    env.storage()
+        .instance()
+        .set(&token_id_counter_key(), &counter);
 }
 
 pub fn read_token_id_counter(env: &Env) -> u64 {
-    env.storage().instance().get(&token_id_counter_key()).unwrap_or(0)
+    env.storage()
+        .instance()
+        .get(&token_id_counter_key())
+        .unwrap_or(0)
 }
 
 // ---------- Total supply ----------
@@ -55,17 +64,25 @@ pub fn write_total_supply(env: &Env, supply: u64) {
 }
 
 pub fn read_total_supply(env: &Env) -> u64 {
-    env.storage().instance().get(&total_supply_key()).unwrap_or(0)
+    env.storage()
+        .instance()
+        .get(&total_supply_key())
+        .unwrap_or(0)
 }
 
 // ---------- Authorized minter ----------
 
 pub fn write_authorized_minter(env: &Env, minter: &Address) {
-    env.storage().instance().set(&authorized_minter_key(), minter);
+    env.storage()
+        .instance()
+        .set(&authorized_minter_key(), minter);
 }
 
 pub fn read_authorized_minter(env: &Env) -> Address {
-    env.storage().instance().get(&authorized_minter_key()).unwrap()
+    env.storage()
+        .instance()
+        .get(&authorized_minter_key())
+        .unwrap()
 }
 
 pub fn has_authorized_minter(env: &Env) -> bool {
@@ -75,15 +92,28 @@ pub fn has_authorized_minter(env: &Env) -> bool {
 // ---------- Authorized burner ----------
 
 pub fn write_authorized_burner(env: &Env, burner: &Address) {
-    env.storage().instance().set(&authorized_burner_key(), burner);
+    env.storage()
+        .instance()
+        .set(&authorized_burner_key(), burner);
 }
 
 pub fn read_authorized_burner(env: &Env) -> Address {
-    env.storage().instance().get(&authorized_burner_key()).unwrap()
+    env.storage()
+        .instance()
+        .get(&authorized_burner_key())
+        .unwrap()
 }
 
 pub fn has_authorized_burner(env: &Env) -> bool {
     env.storage().instance().has(&authorized_burner_key())
+}
+
+pub fn write_paused(env: &Env, paused: bool) {
+    env.storage().instance().set(&paused_key(), &paused);
+}
+
+pub fn read_paused(env: &Env) -> bool {
+    env.storage().instance().get(&paused_key()).unwrap_or(false)
 }
 
 // ---------- Per-token storage ----------

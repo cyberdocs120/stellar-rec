@@ -1,16 +1,18 @@
 #![no_std]
 
-mod storage;
-mod types;
 mod errors;
+mod storage;
 #[cfg(test)]
 mod test;
+mod types;
 
-use soroban_sdk::{contract, contractimpl, panic_with_error, symbol_short, Address, Bytes, BytesN, Env, Vec};
+use soroban_sdk::{
+    contract, contractimpl, panic_with_error, symbol_short, Address, Bytes, BytesN, Env, Vec,
+};
 
 use errors::RecTokenError;
 use storage::*;
-use types::*;
+pub use types::*;
 
 #[contract]
 pub struct RecTokenContract;
@@ -22,6 +24,7 @@ impl RecTokenContract {
         write_admin(&env, &admin);
         write_token_id_counter(&env, 0);
         write_total_supply(&env, 0);
+        write_paused(&env, false);
     }
 
     pub fn admin(env: Env) -> Address {
@@ -37,6 +40,26 @@ impl RecTokenContract {
 
     pub fn total_supply(env: Env) -> u64 {
         read_total_supply(&env)
+    }
+
+    pub fn pause(env: Env) {
+        let admin = read_admin(&env);
+        admin.require_auth();
+        write_paused(&env, true);
+        env.events()
+            .publish((symbol_short!("rec"), symbol_short!("paus")), ());
+    }
+
+    pub fn resume(env: Env) {
+        let admin = read_admin(&env);
+        admin.require_auth();
+        write_paused(&env, false);
+        env.events()
+            .publish((symbol_short!("rec"), symbol_short!("resm")), ());
+    }
+
+    pub fn paused(env: Env) -> bool {
+        read_paused(&env)
     }
 
     pub fn balance_of(env: Env, owner: Address) -> u64 {
@@ -105,6 +128,10 @@ impl RecTokenContract {
         let minter = read_authorized_minter(&env);
         minter.require_auth();
 
+        if read_paused(&env) {
+            panic_with_error!(&env, RecTokenError::ContractPaused);
+        }
+
         let token_id = read_token_id_counter(&env) + 1;
         write_token_id_counter(&env, token_id);
 
@@ -145,6 +172,10 @@ impl RecTokenContract {
     pub fn transfer(env: Env, from: Address, to: Address, token_id: u64) {
         from.require_auth();
 
+        if read_paused(&env) {
+            panic_with_error!(&env, RecTokenError::ContractPaused);
+        }
+
         if !has_token(&env, token_id) {
             panic_with_error!(&env, RecTokenError::TokenNotFound);
         }
@@ -177,6 +208,10 @@ impl RecTokenContract {
     pub fn burn(env: Env, caller: Address, token_id: u64) {
         caller.require_auth();
 
+        if read_paused(&env) {
+            panic_with_error!(&env, RecTokenError::ContractPaused);
+        }
+
         if !has_token(&env, token_id) {
             panic_with_error!(&env, RecTokenError::TokenNotFound);
         }
@@ -184,6 +219,10 @@ impl RecTokenContract {
         let mut token = read_token(&env, token_id);
         if token.metadata.state != RecState::Active {
             panic_with_error!(&env, RecTokenError::RecAlreadyRetired);
+        }
+
+        if token.owner != caller && !(has_authorized_burner(&env) && read_authorized_burner(&env) == caller) {
+            panic_with_error!(&env, RecTokenError::Unauthorized);
         }
 
         token.metadata.state = RecState::Retired;
@@ -207,6 +246,10 @@ impl RecTokenContract {
     pub fn set_metadata_uri(env: Env, token_id: u64, new_uri: Bytes) {
         let admin = read_admin(&env);
         admin.require_auth();
+
+        if read_paused(&env) {
+            panic_with_error!(&env, RecTokenError::ContractPaused);
+        }
 
         if !has_token(&env, token_id) {
             panic_with_error!(&env, RecTokenError::TokenNotFound);

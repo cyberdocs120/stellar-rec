@@ -262,6 +262,14 @@
                         "val": {
                           "u64": 1
                         }
+                      },
+                      {
+                        "key": {
+                          "symbol": "Paus"
+                        },
+                        "val": {
+                          "bool": false
+                        }
                       }
                     ]
                   }

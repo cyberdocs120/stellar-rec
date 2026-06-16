@@ -1,10 +1,10 @@
 use soroban_sdk::{
-    contract, contractimpl, testutils::Address as _, Address, Bytes, BytesN, Env, vec, Vec,
+    contract, contractimpl, testutils::Address as _, vec, Address, Bytes, BytesN, Env, Vec,
 };
 
-use crate::{OracleHandlerContract, OracleHandlerContractClient};
 use crate::types::FuelType;
-use ed25519_dalek::{SigningKey, Signer};
+use crate::{OracleHandlerContract, OracleHandlerContractClient};
+use ed25519_dalek::{Signer, SigningKey};
 
 #[contract]
 pub struct MockRecToken;
@@ -374,7 +374,15 @@ fn test_dispute_and_slashing() {
     let mut data_bytes = [0u8; 48];
     data.copy_into_slice(&mut data_bytes);
     let sig = BytesN::from_array(&env, &signing_key.sign(&data_bytes).to_bytes());
-    client.submit_reading(&meter_id, &mwh, &timestamp, &vec![&env, (pubkey.clone(), sig)], &0, &2024, &make_uri(&env));
+    client.submit_reading(
+        &meter_id,
+        &mwh,
+        &timestamp,
+        &vec![&env, (pubkey.clone(), sig)],
+        &0,
+        &2024,
+        &make_uri(&env),
+    );
 
     client.dispute(&reading_hash.clone().into());
 
@@ -384,7 +392,11 @@ fn test_dispute_and_slashing() {
     let node = client.get_oracle(&pubkey);
     assert_eq!(node.stake, 0, "Stake should be slashed to 0");
     assert!(!node.active, "Oracle should be deactivated after slashing");
-    assert_eq!(node.reputation, 0u32.saturating_sub(10), "Reputation should be reduced"); // 0 - 10 = 0 (saturating)
+    assert_eq!(
+        node.reputation,
+        0u32.saturating_sub(10),
+        "Reputation should be reduced"
+    ); // 0 - 10 = 0 (saturating)
 }
 
 #[test]
@@ -424,7 +436,15 @@ fn test_dispute_honest_outcome_boosts_reputation() {
     let mut data_bytes = [0u8; 48];
     data.copy_into_slice(&mut data_bytes);
     let sig = BytesN::from_array(&env, &signing_key.sign(&data_bytes).to_bytes());
-    client.submit_reading(&meter_id, &mwh, &timestamp, &vec![&env, (pubkey.clone(), sig)], &0, &2024, &make_uri(&env));
+    client.submit_reading(
+        &meter_id,
+        &mwh,
+        &timestamp,
+        &vec![&env, (pubkey.clone(), sig)],
+        &0,
+        &2024,
+        &make_uri(&env),
+    );
 
     client.dispute(&reading_hash.clone().into());
 
@@ -435,8 +455,6 @@ fn test_dispute_honest_outcome_boosts_reputation() {
     assert_eq!(node.stake, 100_000_000_000, "Stake should remain intact");
     assert_eq!(node.reputation, 5, "Reputation should be boosted by 5");
 }
-
-
 
 #[test]
 fn test_claim_rewards_direct() {
@@ -551,7 +569,15 @@ fn test_submit_while_paused() {
     env.mock_all_auths();
     let (_admin, client) = setup_env(&env);
     client.pause();
-    client.submit_reading(&make_meter_id(&env, 1), &500, &123, &vec![&env], &0, &2024, &make_uri(&env));
+    client.submit_reading(
+        &make_meter_id(&env, 1),
+        &500,
+        &123,
+        &vec![&env],
+        &0,
+        &2024,
+        &make_uri(&env),
+    );
 }
 
 #[test]
@@ -567,5 +593,13 @@ fn test_submit_below_threshold_rejected() {
 
     // Only 1 signature
     let sig = BytesN::from_array(&env, &[0u8; 64]);
-    client.submit_reading(&meter_id, &500, &123, &vec![&env, (make_pubkey(&env, 1), sig)], &0, &2024, &make_uri(&env));
+    client.submit_reading(
+        &meter_id,
+        &500,
+        &123,
+        &vec![&env, (make_pubkey(&env, 1), sig)],
+        &0,
+        &2024,
+        &make_uri(&env),
+    );
 }

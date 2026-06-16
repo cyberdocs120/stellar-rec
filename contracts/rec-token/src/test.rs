@@ -1,6 +1,4 @@
-use soroban_sdk::{
-    testutils::Address as _, Address, Bytes, BytesN, Env,
-};
+use soroban_sdk::{testutils::Address as _, Address, Bytes, BytesN, Env};
 
 use crate::{FuelType, RecTokenContract, RecTokenContractClient};
 
@@ -234,6 +232,58 @@ fn test_tokens_by_owner_pagination() {
 }
 
 #[test]
+fn test_pause_resume() {
+    let env = Env::default();
+    let admin = Address::generate(&env);
+    env.mock_all_auths();
+    let contract_id = env.register(RecTokenContract, (&admin,));
+    let client = RecTokenContractClient::new(&env, &contract_id);
+
+    assert!(!client.paused());
+    client.pause();
+    assert!(client.paused());
+    client.resume();
+    assert!(!client.paused());
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #6)")]
+fn test_mint_while_paused_rejected() {
+    setup_env!(env, client, _admin, minter, receiver);
+
+    env.mock_all_auths();
+    client.pause();
+    client.mint(
+        &receiver,
+        &make_asset_id(&env),
+        &1234567890u64,
+        &FuelType::Solar,
+        &2026u32,
+        &make_metadata_uri(&env),
+    );
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #6)")]
+fn test_transfer_while_paused_rejected() {
+    setup_env!(env, client, _admin, _minter, receiver);
+    let new_owner = Address::generate(&env);
+
+    env.mock_all_auths();
+    let token_id = client.mint(
+        &receiver,
+        &make_asset_id(&env),
+        &1234567890u64,
+        &FuelType::Solar,
+        &2026u32,
+        &make_metadata_uri(&env),
+    );
+
+    client.pause();
+    client.transfer(&receiver, &new_owner, &token_id);
+}
+
+#[test]
 #[should_panic(expected = "Error(Contract, #2)")]
 fn test_transfer_retired_token_rejected() {
     setup_env!(env, client, _admin, _minter, receiver);
@@ -252,4 +302,18 @@ fn test_transfer_retired_token_rejected() {
 
     let new_owner = Address::generate(&env);
     client.transfer(&receiver, &new_owner, &token_id);
+}
+
+#[test]
+fn test_admin_functions() {
+    let env = Env::default();
+    let admin = Address::generate(&env);
+    let new_admin = Address::generate(&env);
+    env.mock_all_auths();
+    let contract_id = env.register(RecTokenContract, (&admin,));
+    let client = RecTokenContractClient::new(&env, &contract_id);
+
+    assert_eq!(client.admin(), admin);
+    client.transfer_admin(&new_admin);
+    assert_eq!(client.admin(), new_admin);
 }

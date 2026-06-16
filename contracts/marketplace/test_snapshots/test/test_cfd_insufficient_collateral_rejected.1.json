@@ -202,6 +202,14 @@
                       },
                       {
                         "key": {
+                          "symbol": "Paus"
+                        },
+                        "val": {
+                          "bool": false
+                        }
+                      },
+                      {
+                        "key": {
                           "symbol": "USDC"
                         },
                         "val": {

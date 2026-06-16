@@ -1,17 +1,19 @@
 #![no_std]
 
-mod storage;
-mod types;
 mod errors;
 mod order_book;
+mod storage;
 #[cfg(test)]
 mod test;
+mod types;
 
-use soroban_sdk::{contract, contractimpl, panic_with_error, symbol_short, Address, Env, IntoVal, Symbol, Vec};
+use soroban_sdk::{
+    contract, contractimpl, panic_with_error, symbol_short, Address, Env, IntoVal, Symbol, Vec,
+};
 
 use errors::MarketError;
 use storage::*;
-use types::*;
+pub use types::*;
 
 const INITIAL_MARGIN_BPS: u32 = 1500; // 15%
 const MAINTENANCE_MARGIN_BPS: u32 = 1000; // 10%
@@ -42,6 +44,7 @@ impl MarketplaceContract {
         write_admin(&env, &admin);
         write_fee_rate(&env, 10);
         write_order_counter(&env, 0);
+        write_paused(&env, false);
     }
 
     pub fn admin(env: Env) -> Address {
@@ -66,6 +69,26 @@ impl MarketplaceContract {
 
     pub fn fee_rate(env: Env) -> u32 {
         read_fee_rate(&env)
+    }
+
+    pub fn pause(env: Env) {
+        let admin = read_admin(&env);
+        admin.require_auth();
+        write_paused(&env, true);
+        env.events()
+            .publish((symbol_short!("mkt"), symbol_short!("paus")), ());
+    }
+
+    pub fn resume(env: Env) {
+        let admin = read_admin(&env);
+        admin.require_auth();
+        write_paused(&env, false);
+        env.events()
+            .publish((symbol_short!("mkt"), symbol_short!("resm")), ());
+    }
+
+    pub fn paused(env: Env) -> bool {
+        read_paused(&env)
     }
 
     pub fn set_rec_token(env: Env, id: Address) {
@@ -119,6 +142,10 @@ impl MarketplaceContract {
     ) -> u64 {
         trader.require_auth();
 
+        if read_paused(&env) {
+            panic_with_error!(&env, MarketError::ContractPaused);
+        }
+
         let counter = read_order_counter(&env) + 1;
         write_order_counter(&env, counter);
 
@@ -147,6 +174,10 @@ impl MarketplaceContract {
     pub fn cancel_order(env: Env, caller: Address, order_id: u64) {
         caller.require_auth();
 
+        if read_paused(&env) {
+            panic_with_error!(&env, MarketError::ContractPaused);
+        }
+
         if !has_order(&env, order_id) {
             panic_with_error!(&env, MarketError::OrderNotFound);
         }
@@ -162,10 +193,8 @@ impl MarketplaceContract {
         order.status = OrderStatus::Cancelled;
         write_order(&env, order_id, &order);
 
-        env.events().publish(
-            (symbol_short!("mkt"), symbol_short!("canc")),
-            (order_id,),
-        );
+        env.events()
+            .publish((symbol_short!("mkt"), symbol_short!("canc")), (order_id,));
     }
 
     pub fn get_order(env: Env, order_id: u64) -> Order {
@@ -194,6 +223,10 @@ impl MarketplaceContract {
     pub fn match_orders(env: Env, buy_id: u64, sell_id: u64) -> (u64, i128, i128) {
         if !has_order(&env, buy_id) || !has_order(&env, sell_id) {
             panic_with_error!(&env, MarketError::OrderNotFound);
+        }
+
+        if read_paused(&env) {
+            panic_with_error!(&env, MarketError::ContractPaused);
         }
 
         let mut buy = read_order(&env, buy_id);
@@ -258,6 +291,10 @@ impl MarketplaceContract {
     }
 
     pub fn auto_match(env: Env) -> u32 {
+        if read_paused(&env) {
+            panic_with_error!(&env, MarketError::ContractPaused);
+        }
+
         let mut count = 0u32;
         loop {
             let bid = order_book::best_bid(&env);
@@ -291,6 +328,10 @@ impl MarketplaceContract {
         collateral: i128,
     ) -> u64 {
         caller.require_auth();
+
+        if read_paused(&env) {
+            panic_with_error!(&env, MarketError::ContractPaused);
+        }
 
         if strike <= 0 || qty == 0 || expiry <= env.ledger().timestamp() || collateral <= 0 {
             panic_with_error!(&env, MarketError::InvalidQuantity);
@@ -338,6 +379,10 @@ impl MarketplaceContract {
 
     pub fn accept_cfd(env: Env, caller: Address, position_id: u64, collateral: i128) {
         caller.require_auth();
+
+        if read_paused(&env) {
+            panic_with_error!(&env, MarketError::ContractPaused);
+        }
 
         if !has_position(&env, position_id) {
             panic_with_error!(&env, MarketError::PositionNotFound);
@@ -390,6 +435,10 @@ impl MarketplaceContract {
     pub fn add_collateral(env: Env, caller: Address, position_id: u64, amount: i128) {
         caller.require_auth();
 
+        if read_paused(&env) {
+            panic_with_error!(&env, MarketError::ContractPaused);
+        }
+
         if !has_position(&env, position_id) {
             panic_with_error!(&env, MarketError::PositionNotFound);
         }
@@ -428,6 +477,10 @@ impl MarketplaceContract {
 
     pub fn remove_collateral(env: Env, caller: Address, position_id: u64, amount: i128) {
         caller.require_auth();
+
+        if read_paused(&env) {
+            panic_with_error!(&env, MarketError::ContractPaused);
+        }
 
         if !has_position(&env, position_id) {
             panic_with_error!(&env, MarketError::PositionNotFound);
@@ -493,6 +546,10 @@ impl MarketplaceContract {
     pub fn settle_cfd(env: Env, caller: Address, position_id: u64) {
         caller.require_auth();
 
+        if read_paused(&env) {
+            panic_with_error!(&env, MarketError::ContractPaused);
+        }
+
         if !has_position(&env, position_id) {
             panic_with_error!(&env, MarketError::PositionNotFound);
         }
@@ -552,11 +609,23 @@ impl MarketplaceContract {
 
         // Return collateral to parties
         if final_a > 0 {
-            transfer_usdc(&env, &usdc_id, &env.current_contract_address(), &position.counterparty_a, final_a);
+            transfer_usdc(
+                &env,
+                &usdc_id,
+                &env.current_contract_address(),
+                &position.counterparty_a,
+                final_a,
+            );
         }
         if final_b > 0 {
             let b_addr = position.counterparty_b.clone().unwrap();
-            transfer_usdc(&env, &usdc_id, &env.current_contract_address(), &b_addr, final_b);
+            transfer_usdc(
+                &env,
+                &usdc_id,
+                &env.current_contract_address(),
+                &b_addr,
+                final_b,
+            );
         }
 
         position.state = PositionState::Settled;
@@ -572,6 +641,10 @@ impl MarketplaceContract {
 
     pub fn liquidate(env: Env, caller: Address, position_id: u64) {
         caller.require_auth();
+
+        if read_paused(&env) {
+            panic_with_error!(&env, MarketError::ContractPaused);
+        }
 
         if !has_position(&env, position_id) {
             panic_with_error!(&env, MarketError::PositionNotFound);
@@ -639,11 +712,23 @@ impl MarketplaceContract {
         // In liquidation, the liquidator might get a small reward?
         // For now, just settle it.
         if final_a > 0 {
-            transfer_usdc(&env, &usdc_id, &env.current_contract_address(), &position.counterparty_a, final_a);
+            transfer_usdc(
+                &env,
+                &usdc_id,
+                &env.current_contract_address(),
+                &position.counterparty_a,
+                final_a,
+            );
         }
         if final_b > 0 {
             let b_addr = position.counterparty_b.clone().unwrap();
-            transfer_usdc(&env, &usdc_id, &env.current_contract_address(), &b_addr, final_b);
+            transfer_usdc(
+                &env,
+                &usdc_id,
+                &env.current_contract_address(),
+                &b_addr,
+                final_b,
+            );
         }
 
         position.state = PositionState::Liquidated;

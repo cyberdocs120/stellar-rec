@@ -1,12 +1,14 @@
 #![no_std]
 
-mod storage;
-mod types;
 mod errors;
+mod storage;
 #[cfg(test)]
 mod test;
+mod types;
 
-use soroban_sdk::{contract, contractimpl, panic_with_error, symbol_short, Address, Bytes, BytesN, Env, IntoVal};
+use soroban_sdk::{
+    contract, contractimpl, panic_with_error, symbol_short, Address, Bytes, BytesN, Env, IntoVal,
+};
 
 use errors::OracleError;
 use storage::*;
@@ -91,10 +93,8 @@ impl OracleHandlerContract {
         node.active = false;
         write_oracle(&env, &pubkey, &node);
 
-        env.events().publish(
-            (symbol_short!("orcl"), symbol_short!("rev")),
-            (pubkey,),
-        );
+        env.events()
+            .publish((symbol_short!("orcl"), symbol_short!("rev")), (pubkey,));
     }
 
     pub fn oracle_count(env: Env) -> u32 {
@@ -165,7 +165,12 @@ impl OracleHandlerContract {
         let _: () = env.invoke_contract(
             &usdc_token,
             &symbol_short!("xfer"),
-            (node.operator.clone(), env.current_contract_address(), amount).into_val(&env),
+            (
+                node.operator.clone(),
+                env.current_contract_address(),
+                amount,
+            )
+                .into_val(&env),
         );
 
         node.stake += amount;
@@ -196,7 +201,12 @@ impl OracleHandlerContract {
         let _: () = env.invoke_contract(
             &usdc_token,
             &symbol_short!("xfer"),
-            (env.current_contract_address(), node.operator.clone(), amount).into_val(&env),
+            (
+                env.current_contract_address(),
+                node.operator.clone(),
+                amount,
+            )
+                .into_val(&env),
         );
 
         node.stake -= amount;
@@ -254,10 +264,8 @@ impl OracleHandlerContract {
         let admin = read_admin(&env);
         admin.require_auth();
         write_price(&env, price);
-        env.events().publish(
-            (symbol_short!("orcl"), symbol_short!("prce")),
-            (price,),
-        );
+        env.events()
+            .publish((symbol_short!("orcl"), symbol_short!("prce")), (price,));
     }
 
     pub fn get_price(env: Env) -> i128 {
@@ -284,7 +292,12 @@ impl OracleHandlerContract {
         let _: () = env.invoke_contract(
             &usdc_token,
             &symbol_short!("xfer"),
-            (env.current_contract_address(), node.operator.clone(), amount).into_val(&env),
+            (
+                env.current_contract_address(),
+                node.operator.clone(),
+                amount,
+            )
+                .into_val(&env),
         );
 
         env.events().publish(
@@ -293,7 +306,13 @@ impl OracleHandlerContract {
         );
     }
 
-    pub fn set_meter(env: Env, meter_id: BytesN<32>, receiver: Address, asset_id: BytesN<32>, capacity_mw: u64) {
+    pub fn set_meter(
+        env: Env,
+        meter_id: BytesN<32>,
+        receiver: Address,
+        asset_id: BytesN<32>,
+        capacity_mw: u64,
+    ) {
         let admin = read_admin(&env);
         admin.require_auth();
 
@@ -317,20 +336,16 @@ impl OracleHandlerContract {
         let admin = read_admin(&env);
         admin.require_auth();
         write_paused(&env, true);
-        env.events().publish(
-            (symbol_short!("orcl"), symbol_short!("pause")),
-            (),
-        );
+        env.events()
+            .publish((symbol_short!("orcl"), symbol_short!("pause")), ());
     }
 
     pub fn resume(env: Env) {
         let admin = read_admin(&env);
         admin.require_auth();
         write_paused(&env, false);
-        env.events().publish(
-            (symbol_short!("orcl"), symbol_short!("resume")),
-            (),
-        );
+        env.events()
+            .publish((symbol_short!("orcl"), symbol_short!("resume")), ());
     }
 
     pub fn paused(env: Env) -> bool {
@@ -368,7 +383,10 @@ impl OracleHandlerContract {
         let mut data = Bytes::new(&env);
         data.append(&meter_id.clone().into());
         data.append(&Bytes::from_slice(&env, &mwh.to_be_bytes()));
-        data.append(&Bytes::from_slice(&env, &generation_timestamp.to_be_bytes()));
+        data.append(&Bytes::from_slice(
+            &env,
+            &generation_timestamp.to_be_bytes(),
+        ));
 
         let reading_hash: BytesN<32> = env.crypto().sha256(&data).into();
 
@@ -413,7 +431,7 @@ impl OracleHandlerContract {
                 vintage_year,
                 metadata_uri,
             )
-            .into_val(&env),
+                .into_val(&env),
         );
 
         let record = ReadingRecord {
@@ -449,7 +467,13 @@ impl OracleHandlerContract {
 
         env.events().publish(
             (symbol_short!("orcl"), symbol_short!("read")),
-            (reading_hash, meter_id, mwh, signatures.len() as u32, token_id),
+            (
+                reading_hash,
+                meter_id,
+                mwh,
+                signatures.len() as u32,
+                token_id,
+            ),
         );
 
         token_id
@@ -503,7 +527,8 @@ impl OracleHandlerContract {
                     let _: () = env.invoke_contract(
                         &usdc_token,
                         &symbol_short!("xfer"),
-                        (env.current_contract_address(), admin.clone(), slash_amount).into_val(&env),
+                        (env.current_contract_address(), admin.clone(), slash_amount)
+                            .into_val(&env),
                     );
                 }
                 oracle.active = false;

@@ -8,4 +8,5 @@ pub enum RecTokenError {
     InsufficientBalance = 3,
     TokenNotFound = 4,
     DuplicateMint = 5,
+    ContractPaused = 6,
 }

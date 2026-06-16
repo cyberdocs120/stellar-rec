@@ -30,6 +30,10 @@ pub fn oracle_handler_key() -> Symbol {
     symbol_short!("OraH")
 }
 
+pub fn paused_key() -> Symbol {
+    symbol_short!("Paus")
+}
+
 pub fn write_admin(env: &Env, admin: &Address) {
     env.storage().instance().set(&admin_key(), admin);
 }
@@ -51,7 +55,10 @@ pub fn write_order_counter(env: &Env, counter: u64) {
 }
 
 pub fn read_order_counter(env: &Env) -> u64 {
-    env.storage().instance().get(&order_counter_key()).unwrap_or(0)
+    env.storage()
+        .instance()
+        .get(&order_counter_key())
+        .unwrap_or(0)
 }
 
 pub fn write_rec_token(env: &Env, addr: &Address) {
@@ -86,6 +93,14 @@ pub fn read_oracle_handler(env: &Env) -> Address {
     env.storage().instance().get(&oracle_handler_key()).unwrap()
 }
 
+pub fn write_paused(env: &Env, paused: bool) {
+    env.storage().instance().set(&paused_key(), &paused);
+}
+
+pub fn read_paused(env: &Env) -> bool {
+    env.storage().instance().get(&paused_key()).unwrap_or(false)
+}
+
 pub fn order_storage_key(env: &Env, order_id: u64) -> Bytes {
     let mut key = Bytes::new(env);
     key.push_back(0x10);
@@ -117,11 +132,16 @@ pub fn position_counter_key() -> Symbol {
 }
 
 pub fn write_position_counter(env: &Env, counter: u64) {
-    env.storage().instance().set(&position_counter_key(), &counter);
+    env.storage()
+        .instance()
+        .set(&position_counter_key(), &counter);
 }
 
 pub fn read_position_counter(env: &Env) -> u64 {
-    env.storage().instance().get(&position_counter_key()).unwrap_or(0)
+    env.storage()
+        .instance()
+        .get(&position_counter_key())
+        .unwrap_or(0)
 }
 
 pub fn position_storage_key(env: &Env, position_id: u64) -> Bytes {

@@ -16,4 +16,5 @@ pub enum MarketError {
     PositionNotFound = 11,
     PositionNotActive = 12,
     CfDAlreadySettled = 13,
+    ContractPaused = 14,
 }

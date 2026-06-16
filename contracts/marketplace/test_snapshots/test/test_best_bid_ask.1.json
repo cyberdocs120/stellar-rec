@@ -411,6 +411,14 @@
                         "val": {
                           "u64": 2
                         }
+                      },
+                      {
+                        "key": {
+                          "symbol": "Paus"
+                        },
+                        "val": {
+                          "bool": false
+                        }
                       }
                     ]
                   }
