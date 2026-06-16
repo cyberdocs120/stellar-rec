@@ -4,8 +4,11 @@ version = "0.1.0"
 edition.workspace = true
 
 [dependencies]
-soroban-sdk.workspace = true
+soroban-sdk = { workspace = true, features = ["testutils"] }
 rec-token = { path = "../../contracts/rec-token" }
 oracle-handler = { path = "../../contracts/oracle-handler" }
 marketplace = { path = "../../contracts/marketplace" }
 retirement = { path = "../../contracts/retirement" }
+
+[dev-dependencies]
+ed25519-dalek = "2.2.0"
