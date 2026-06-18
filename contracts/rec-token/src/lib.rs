@@ -221,7 +221,9 @@ impl RecTokenContract {
             panic_with_error!(&env, RecTokenError::RecAlreadyRetired);
         }
 
-        if token.owner != caller && !(has_authorized_burner(&env) && read_authorized_burner(&env) == caller) {
+        if token.owner != caller
+            && !(has_authorized_burner(&env) && read_authorized_burner(&env) == caller)
+        {
             panic_with_error!(&env, RecTokenError::Unauthorized);
         }
 

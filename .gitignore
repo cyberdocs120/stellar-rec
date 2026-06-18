@@ -13,3 +13,4 @@ frontend/build/
 *.swo
 .DS_Store
 Thumbs.db
+Plan.md

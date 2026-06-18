@@ -352,6 +352,7 @@ impl OracleHandlerContract {
         read_paused(&env)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn submit_reading(
         env: Env,
         meter_id: BytesN<32>,
@@ -439,7 +440,7 @@ impl OracleHandlerContract {
             meter_id: meter_id.clone(),
             mwh,
             timestamp: generation_timestamp,
-            oracle_count: signatures.len() as u32,
+            oracle_count: signatures.len(),
             threshold_met: true,
             disputed: false,
             resolved: false,
@@ -467,13 +468,7 @@ impl OracleHandlerContract {
 
         env.events().publish(
             (symbol_short!("orcl"), symbol_short!("read")),
-            (
-                reading_hash,
-                meter_id,
-                mwh,
-                signatures.len() as u32,
-                token_id,
-            ),
+            (reading_hash, meter_id, mwh, signatures.len(), token_id),
         );
 
         token_id

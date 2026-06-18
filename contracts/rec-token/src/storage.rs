@@ -38,6 +38,7 @@ pub fn read_admin(env: &Env) -> Address {
     env.storage().instance().get(&admin_key()).unwrap()
 }
 
+#[allow(dead_code)]
 pub fn has_admin(env: &Env) -> bool {
     env.storage().instance().has(&admin_key())
 }
@@ -85,6 +86,7 @@ pub fn read_authorized_minter(env: &Env) -> Address {
         .unwrap()
 }
 
+#[allow(dead_code)]
 pub fn has_authorized_minter(env: &Env) -> bool {
     env.storage().instance().has(&authorized_minter_key())
 }

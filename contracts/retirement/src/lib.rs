@@ -129,7 +129,7 @@ impl RetirementContract {
             panic_with_error!(&env, RetirementError::ContractPaused);
         }
 
-        if token_ids.len() == 0 {
+        if token_ids.is_empty() {
             panic_with_error!(&env, RetirementError::NoTokensProvided);
         }
 

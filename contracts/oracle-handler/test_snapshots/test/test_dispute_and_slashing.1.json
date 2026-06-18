@@ -73,7 +73,7 @@
               "function_name": "register_oracle",
               "args": [
                 {
-                  "bytes": "5f44b5b9e6449cf90c38e4b0eb7d459a8d3e1ef1eb98faf00a132762f3ba58d3"
+                  "bytes": "9cc9055523043df4d5f0b8c5d921d4919c9a945f706f6a5d1c38296fc7beec0d"
                 },
                 {
                   "bytes": "68747470733a2f2f6f7261636c652e6578616d706c652e636f6d"
@@ -98,7 +98,7 @@
               "function_name": "deposit_bond",
               "args": [
                 {
-                  "bytes": "5f44b5b9e6449cf90c38e4b0eb7d459a8d3e1ef1eb98faf00a132762f3ba58d3"
+                  "bytes": "9cc9055523043df4d5f0b8c5d921d4919c9a945f706f6a5d1c38296fc7beec0d"
                 },
                 {
                   "i128": {
@@ -444,7 +444,7 @@
           "contract_data": {
             "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4",
             "key": {
-              "bytes": "105f44b5b9e6449cf90c38e4b0eb7d459a8d3e1ef1eb98faf00a132762f3ba58d3"
+              "bytes": "109cc9055523043df4d5f0b8c5d921d4919c9a945f706f6a5d1c38296fc7beec0d"
             },
             "durability": "persistent"
           }
@@ -457,7 +457,7 @@
                 "ext": "v0",
                 "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4",
                 "key": {
-                  "bytes": "105f44b5b9e6449cf90c38e4b0eb7d459a8d3e1ef1eb98faf00a132762f3ba58d3"
+                  "bytes": "109cc9055523043df4d5f0b8c5d921d4919c9a945f706f6a5d1c38296fc7beec0d"
                 },
                 "durability": "persistent",
                 "val": {
@@ -483,7 +483,7 @@
                         "symbol": "pubkey"
                       },
                       "val": {
-                        "bytes": "5f44b5b9e6449cf90c38e4b0eb7d459a8d3e1ef1eb98faf00a132762f3ba58d3"
+                        "bytes": "9cc9055523043df4d5f0b8c5d921d4919c9a945f706f6a5d1c38296fc7beec0d"
                       }
                     },
                     {
@@ -667,7 +667,7 @@
                       "val": {
                         "vec": [
                           {
-                            "bytes": "5f44b5b9e6449cf90c38e4b0eb7d459a8d3e1ef1eb98faf00a132762f3ba58d3"
+                            "bytes": "9cc9055523043df4d5f0b8c5d921d4919c9a945f706f6a5d1c38296fc7beec0d"
                           }
                         ]
                       }

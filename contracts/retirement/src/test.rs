@@ -1,6 +1,4 @@
-use soroban_sdk::{
-    testutils::Address as _, testutils::Ledger as _, Address, Bytes, BytesN, Env, Vec,
-};
+use soroban_sdk::{testutils::Address as _, Address, Bytes, BytesN, Env, Vec};
 
 use crate::{ClaimData, RetirementContract, RetirementContractClient};
 

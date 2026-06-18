@@ -23,6 +23,7 @@ mod tests {
         pub fn xfer(_env: Env, _from: Address, _to: Address, _amount: i128) {}
     }
 
+    #[allow(dead_code)]
     struct Protocol<'a> {
         env: &'a Env,
         admin: Address,
@@ -408,9 +409,12 @@ mod tests {
         let protocol = setup_protocol(&env);
         let meter_id = make_bytes_n(&env, 11);
         let (signing_key, pubkey) = oracle_key(&env, 7);
-        let signatures: Vec<(BytesN<32>, BytesN<64>)> = vec![
+        let _signatures: Vec<(BytesN<32>, BytesN<64>)> = vec![
             &env,
-            (pubkey.clone(), signed_reading(&env, &signing_key, &meter_id, 1, 1_704_067_200).1),
+            (
+                pubkey.clone(),
+                signed_reading(&env, &signing_key, &meter_id, 1, 1_704_067_200).1,
+            ),
         ];
 
         for i in 1u64..=3u64 {
@@ -430,9 +434,15 @@ mod tests {
 
         let retirer = protocol.generator.clone();
         let claim_ids = Vec::from_array(&env, [1u64, 2u64, 3u64]);
-        protocol.retirement_client.set_retirement_fee(&2_000_000i128);
-        let receipt_id = protocol.retirement_client.retire(&retirer, &claim_ids, &make_claim(&env));
-        let receipt = protocol.retirement_client.get_retirement_receipt(&receipt_id);
+        protocol
+            .retirement_client
+            .set_retirement_fee(&2_000_000i128);
+        let receipt_id = protocol
+            .retirement_client
+            .retire(&retirer, &claim_ids, &make_claim(&env));
+        let receipt = protocol
+            .retirement_client
+            .get_retirement_receipt(&receipt_id);
 
         assert_eq!(receipt.total_mwh, 3);
         assert_eq!(receipt.retirer, retirer);
@@ -466,7 +476,9 @@ mod tests {
             &make_uri(&env),
         );
 
-        protocol.rec_client.transfer(&protocol.generator, &buyer, &token_id);
+        protocol
+            .rec_client
+            .transfer(&protocol.generator, &buyer, &token_id);
 
         protocol.market_client.place_order(
             &buyer,

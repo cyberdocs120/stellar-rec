@@ -25,7 +25,7 @@ pub fn buy_orders(env: &Env) -> Vec<Order> {
     }
 
     let mut sorted: Vec<Order> = Vec::new(env);
-    while orders.len() > 0 {
+    while !orders.is_empty() {
         let mut best_idx = 0u32;
         let mut best_price = orders.get(0).unwrap().price;
         let mut best_ts = orders.get(0).unwrap().timestamp;
@@ -66,7 +66,7 @@ pub fn sell_orders(env: &Env) -> Vec<Order> {
     }
 
     let mut sorted: Vec<Order> = Vec::new(env);
-    while orders.len() > 0 {
+    while !orders.is_empty() {
         let mut best_idx = 0u32;
         let mut best_price = orders.get(0).unwrap().price;
         let mut best_ts = orders.get(0).unwrap().timestamp;
